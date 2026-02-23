@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(config.polling.fear_greed.source, "alternative_me");
         assert!(config.polling.fear_greed.endpoint.is_none());
 
-        assert_eq!(config.polling.dominance.interval_minutes, 1440);
+        assert_eq!(config.polling.dominance.interval_minutes, 60);
         assert_eq!(config.polling.dominance.source, "coingecko");
 
         // Retry

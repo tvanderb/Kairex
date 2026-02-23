@@ -25,7 +25,7 @@ interval_minutes = 1440   # Daily
 source = "alternative_me"
 
 [polling.dominance]
-interval_minutes = 1440   # Daily (CoinGecko caches every 10min)
+interval_minutes = 60     # Hourly (CoinGecko updates every 10min, free tier allows ~10k/month)
 source = "coingecko"
 
 [retry]

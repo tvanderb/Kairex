@@ -21,7 +21,7 @@ interval_minutes = 1440
 source = "alternative_me"
 
 [polling.dominance]
-interval_minutes = 1440
+interval_minutes = 60
 source = "coingecko"
 
 [retry]
