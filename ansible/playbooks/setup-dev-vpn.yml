@@ -1,0 +1,16 @@
+---
+# Client-side WireGuard setup for the dev machine (Arch Linux).
+# Runs against localhost — requires sudo.
+#
+# Usage:
+#   ansible-playbook playbooks/setup-dev-vpn.yml \
+#     -e wg_server_public_key=SERVER_PUB_KEY \
+#     -e wg_server_endpoint=VPS_IP:51820 \
+#     --ask-become-pass
+
+- name: Set up dev VPN client
+  hosts: localhost
+  connection: local
+  become: true
+  roles:
+    - dev_vpn

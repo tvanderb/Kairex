@@ -1,6 +1,70 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "ansible@latest": {
+      "last_modified": "2026-02-13T23:34:13Z",
+      "resolved": "github:NixOS/nixpkgs/7d2ae6d8b8b697b5114a4249d0d958ee5f23d8fe#ansible",
+      "source": "devbox-search",
+      "version": "2.20.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4bjn9firrnif547ya964myjaqp1c3d7r-python3.13-ansible-core-2.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/bqczz3f6dq55403sh0gz3v16wspdm80x-python3.13-ansible-core-2.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/4bjn9firrnif547ya964myjaqp1c3d7r-python3.13-ansible-core-2.20.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/ml06gwcibfwznsc7b7n84xc01m5agx3i-python3.13-ansible-core-2.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/l6w7z5y3bh84yp2ny5hzqdqw9v1pp9nd-python3.13-ansible-core-2.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/ml06gwcibfwznsc7b7n84xc01m5agx3i-python3.13-ansible-core-2.20.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/wm8zd079j86p41z66j3m9fb063j7p3vc-python3.13-ansible-core-2.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/hm9gw3bkfxn97anlh7hbhny11mjzmd93-python3.13-ansible-core-2.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/wm8zd079j86p41z66j3m9fb063j7p3vc-python3.13-ansible-core-2.20.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/27a8haczygaiasifk8kj94jkhwg5dyih-python3.13-ansible-core-2.20.0",
+              "default": true
+            },
+            {
+              "name": "dist",
+              "path": "/nix/store/d17i608jn48xxc3fc8cckvg8n52mk404-python3.13-ansible-core-2.20.0-dist"
+            }
+          ],
+          "store_path": "/nix/store/27a8haczygaiasifk8kj94jkhwg5dyih-python3.13-ansible-core-2.20.0"
+        }
+      }
+    },
     "docker@latest": {
       "last_modified": "2026-02-08T07:51:33Z",
       "resolved": "github:NixOS/nixpkgs/fef9403a3e4d31b0a23f0bacebbec52c248fbb51#docker",

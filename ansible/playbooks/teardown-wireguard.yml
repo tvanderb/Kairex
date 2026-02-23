@@ -1,0 +1,33 @@
+---
+# Cleanly removes WireGuard from the VPS.
+# Run: ansible-playbook playbooks/teardown-wireguard.yml
+
+- name: Teardown WireGuard VPN server
+  hosts: vps
+  become: true
+  tasks:
+    - name: Stop and disable wg-quick@wg0
+      ansible.builtin.systemd:
+        name: wg-quick@wg0
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Remove WireGuard configuration directory
+      ansible.builtin.file:
+        path: /etc/wireguard
+        state: absent
+
+    - name: Remove ufw rule for WireGuard
+      community.general.ufw:
+        rule: allow
+        port: "51820"
+        proto: udp
+        delete: true
+      ignore_errors: true
+
+    - name: Remove WireGuard package
+      ansible.builtin.apt:
+        name: wireguard
+        state: absent
+        purge: true

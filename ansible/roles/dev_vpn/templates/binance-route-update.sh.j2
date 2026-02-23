@@ -1,0 +1,35 @@
+#!/bin/bash
+# Managed by Ansible — do not edit manually
+# Resolve Binance API domains and route their IPs through WireGuard
+
+DOMAINS="api.binance.com fapi.binance.com stream.binance.com api1.binance.com api2.binance.com api3.binance.com api4.binance.com"
+WG_INTERFACE="wg0"
+WG_GATEWAY="10.66.66.1"
+ROUTE_TABLE="binance"
+
+# Ensure custom routing table exists
+RT_TABLES=""
+for f in /etc/iproute2/rt_tables /usr/lib/iproute2/rt_tables; do
+    [ -f "$f" ] && RT_TABLES="$f" && break
+done
+if [ -n "$RT_TABLES" ] && ! grep -q "^200 ${ROUTE_TABLE}$" "$RT_TABLES"; then
+    echo "200 ${ROUTE_TABLE}" >> "$RT_TABLES"
+fi
+
+# Flush old routes
+ip route flush table ${ROUTE_TABLE} 2>/dev/null
+
+# Resolve each domain and add routes
+for domain in $DOMAINS; do
+    ips=$(dig +short "$domain" A | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$')
+    for ip in $ips; do
+        ip route add "$ip/32" via "$WG_GATEWAY" dev "$WG_INTERFACE" table ${ROUTE_TABLE} 2>/dev/null
+    done
+done
+
+# Add routing rule (if not already present)
+if ! ip rule show | grep -q "lookup ${ROUTE_TABLE}"; then
+    ip rule add table ${ROUTE_TABLE} priority 100
+fi
+
+logger "binance-route-update: Routes updated for ${DOMAINS}"

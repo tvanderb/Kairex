@@ -1,0 +1,6 @@
+---
+- name: Install Docker
+  hosts: vps
+  become: true
+  roles:
+    - docker

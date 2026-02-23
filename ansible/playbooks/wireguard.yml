@@ -1,0 +1,6 @@
+---
+- name: Set up WireGuard VPN server
+  hosts: vps
+  become: true
+  roles:
+    - wireguard

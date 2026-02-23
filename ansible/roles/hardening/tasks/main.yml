@@ -1,0 +1,94 @@
+---
+- name: Set timezone to UTC
+  community.general.timezone:
+    name: UTC
+
+- name: Create deploy user
+  ansible.builtin.user:
+    name: deploy
+    shell: /bin/bash
+    create_home: true
+    groups: sudo
+    append: true
+
+- name: Add SSH authorized key for deploy user
+  ansible.posix.authorized_key:
+    user: deploy
+    key: "{{ lookup('file', lookup('env', 'HOME') + '/.ssh/kairex_vps.pub') }}"
+    state: present
+
+- name: Allow deploy user passwordless sudo for docker commands
+  ansible.builtin.template:
+    src: sudoers_deploy.j2
+    dest: /etc/sudoers.d/deploy
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Install hardening packages
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+    update_cache: true
+
+- name: Deploy sshd_config
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    mode: "0644"
+    validate: "sshd -t -f %s"
+  notify:
+    - validate deploy user
+    - restart sshd
+
+- name: Configure ufw defaults
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  loop:
+    - { direction: incoming, policy: deny }
+    - { direction: outgoing, policy: allow }
+
+- name: Allow SSH through ufw
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow WireGuard through ufw
+  community.general.ufw:
+    rule: allow
+    port: "51820"
+    proto: udp
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled
+
+- name: Configure fail2ban SSH jail
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [sshd]
+      enabled = true
+      port = ssh
+      filter = sshd
+      maxretry = 5
+      bantime = 3600
+      findtime = 600
+    mode: "0644"
+  notify: restart fail2ban
+
+- name: Enable unattended-upgrades
+  ansible.builtin.debconf:
+    name: unattended-upgrades
+    question: unattended-upgrades/enable_auto_updates
+    vtype: boolean
+    value: "true"
+
+- name: Reconfigure unattended-upgrades
+  ansible.builtin.command: dpkg-reconfigure -f noninteractive unattended-upgrades
+  changed_when: false

@@ -4,7 +4,8 @@
     "python312@latest",
     "just@latest",
     "sqlite@latest",
-    "docker@latest"
+    "docker@latest",
+    "ansible@latest"
   ],
   "shell": {
     "init_hook": [

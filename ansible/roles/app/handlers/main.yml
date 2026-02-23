@@ -1,0 +1,7 @@
+---
+- name: restart kairex
+  ansible.builtin.command:
+    cmd: docker compose restart
+    chdir: /opt/kairex
+  become: true
+  become_user: deploy

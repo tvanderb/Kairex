@@ -1,0 +1,14 @@
+# Managed by Ansible — do not edit manually
+
+[Interface]
+Address = {{ wg_server_address | default('10.66.66.1/24') }}
+ListenPort = {{ wg_listen_port | default(51820) }}
+PrivateKey = {{ wg_server_private_key }}
+
+# NAT: masquerade client traffic so it exits with the VPS public IP
+PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+
+[Peer]
+PublicKey = {{ wg_client_public_key | default('PLACEHOLDER_CLIENT_PUBLIC_KEY') }}
+AllowedIPs = {{ wg_client_address | default('10.66.66.2/32') }}

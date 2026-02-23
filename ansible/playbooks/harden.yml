@@ -1,0 +1,10 @@
+---
+# VPS hardening — run this first against a fresh Debian 13 VPS.
+# First run uses root: ansible-playbook playbooks/harden.yml -e ansible_user=root
+# Subsequent runs use deploy user (default from ansible.cfg).
+
+- name: Harden VPS
+  hosts: vps
+  become: true
+  roles:
+    - hardening

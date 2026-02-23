@@ -1,0 +1,8 @@
+---
+- name: Deploy Kairex
+  hosts: vps
+  become: true
+  vars_files:
+    - ../vars/secrets.yml
+  roles:
+    - app

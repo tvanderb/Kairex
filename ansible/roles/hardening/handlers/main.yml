@@ -1,0 +1,17 @@
+---
+- name: validate deploy user
+  ansible.builtin.command:
+    cmd: ssh -i ~/.ssh/kairex_vps -o StrictHostKeyChecking=no -o BatchMode=yes deploy@{{ ansible_host }} "echo ok"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: restart sshd
+  ansible.builtin.systemd:
+    name: sshd
+    state: restarted
+
+- name: restart fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    state: restarted

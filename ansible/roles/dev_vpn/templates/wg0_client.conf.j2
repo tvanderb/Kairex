@@ -1,0 +1,14 @@
+# Managed by Ansible — do not edit manually
+
+[Interface]
+Address = {{ wg_client_address | default('10.66.66.2/24') }}
+PrivateKey = {{ wg_client_private_key }}
+Table = off
+PostUp = /usr/local/bin/binance-route-update.sh
+PostDown = ip route flush table binance; ip rule del table binance 2>/dev/null
+
+[Peer]
+PublicKey = {{ wg_server_public_key }}
+Endpoint = {{ wg_server_endpoint }}
+AllowedIPs = 10.66.66.0/24, 0.0.0.0/0
+PersistentKeepalive = 25

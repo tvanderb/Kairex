@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 .devbox/
 .venv/
+*.retry
+ansible/setup-client-vpn.sh

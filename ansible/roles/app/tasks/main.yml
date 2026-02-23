@@ -1,0 +1,92 @@
+---
+- name: Install git
+  ansible.builtin.apt:
+    name: git
+    state: present
+
+- name: Create app directory
+  ansible.builtin.file:
+    path: /opt/kairex
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: "0755"
+
+- name: Clone or update repository
+  ansible.builtin.git:
+    repo: "{{ kairex_repo_url | default('https://github.com/tvanderb/kairex.git') }}"
+    dest: /opt/kairex
+    version: "{{ kairex_branch | default('master') }}"
+    force: false
+  become: true
+  become_user: deploy
+
+- name: Deploy .env file
+  ansible.builtin.template:
+    src: env.j2
+    dest: /opt/kairex/.env
+    owner: deploy
+    group: deploy
+    mode: "0600"
+
+- name: Build Docker images
+  ansible.builtin.command:
+    cmd: docker compose build
+    chdir: /opt/kairex
+  become: true
+  become_user: deploy
+  changed_when: true
+  notify: restart kairex
+
+- name: Start services
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: /opt/kairex
+  become: true
+  become_user: deploy
+  changed_when: true
+
+- name: Wait for services to start
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Health check — docker compose ps
+  ansible.builtin.command:
+    cmd: docker compose ps
+    chdir: /opt/kairex
+  become: true
+  become_user: deploy
+  changed_when: false
+  register: compose_ps
+
+- name: Show running services
+  ansible.builtin.debug:
+    msg: "{{ compose_ps.stdout }}"
+
+- name: Health check — Grafana reachable
+  ansible.builtin.uri:
+    url: http://localhost:3000
+    status_code: 200
+    timeout: 10
+  retries: 3
+  delay: 5
+  register: grafana_check
+  ignore_errors: true
+
+- name: Health check — Prometheus alive
+  ansible.builtin.uri:
+    url: http://localhost:9091/api/v1/status/config
+    status_code: 200
+    timeout: 10
+  retries: 3
+  delay: 5
+  register: prometheus_check
+  ignore_errors: true
+
+- name: Deployment summary
+  ansible.builtin.debug:
+    msg: |
+      === Deployment Summary ===
+      Services: {{ compose_ps.stdout_lines | length - 1 }} running
+      Grafana: {{ 'OK' if grafana_check is succeeded else 'UNREACHABLE' }}
+      Prometheus: {{ 'OK' if prometheus_check is succeeded else 'UNREACHABLE' }}

@@ -41,6 +41,22 @@ down:
 dev-up:
     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-# Deploy (placeholder)
+# Deploy to VPS via Ansible
 deploy:
-    @echo "Run: ansible-playbook ansible/playbooks/deploy.yml"
+    cd ansible && ansible-playbook playbooks/deploy.yml
+
+# Bring up WireGuard VPN
+vpn-up:
+    sudo wg-quick up wg0
+
+# Bring down WireGuard VPN
+vpn-down:
+    sudo wg-quick down wg0
+
+# Show WireGuard VPN status
+vpn-status:
+    sudo wg show
+
+# Configure git hooks
+setup-hooks:
+    git config core.hooksPath .githooks

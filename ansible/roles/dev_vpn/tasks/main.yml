@@ -1,0 +1,90 @@
+---
+- name: Install wireguard-tools
+  community.general.pacman:
+    name: wireguard-tools
+    state: present
+
+- name: Generate client private key
+  ansible.builtin.shell: wg genkey | tee /etc/wireguard/client_private.key | wg pubkey > /etc/wireguard/client_public.key
+  args:
+    creates: /etc/wireguard/client_private.key
+
+- name: Set private key permissions
+  ansible.builtin.file:
+    path: /etc/wireguard/client_private.key
+    mode: "0600"
+
+- name: Read client private key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/client_private.key
+  register: wg_client_private_key_file
+
+- name: Read client public key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/client_public.key
+  register: wg_client_public_key_file
+
+- name: Set client key facts
+  ansible.builtin.set_fact:
+    wg_client_private_key: "{{ wg_client_private_key_file.content | b64decode | trim }}"
+    wg_client_public_key: "{{ wg_client_public_key_file.content | b64decode | trim }}"
+
+- name: Display client public key
+  ansible.builtin.debug:
+    msg: >
+      Client public key (add this to the server [Peer] section):
+      {{ wg_client_public_key }}
+
+- name: Ensure custom routing table exists
+  ansible.builtin.lineinfile:
+    path: /etc/iproute2/rt_tables
+    line: "200 binance"
+    regexp: "^200\\s+"
+    state: present
+
+- name: Deploy WireGuard client config
+  ansible.builtin.template:
+    src: wg0_client.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: "0600"
+  notify: restart client wireguard
+
+- name: Deploy binance route update script
+  ansible.builtin.template:
+    src: binance-route-update.sh.j2
+    dest: /usr/local/bin/binance-route-update.sh
+    mode: "0755"
+
+- name: Set up cron job for route updates
+  ansible.builtin.cron:
+    name: "Update Binance API routes"
+    minute: "*/5"
+    job: "/usr/local/bin/binance-route-update.sh"
+    user: root
+
+- name: Enable and start WireGuard client
+  ansible.builtin.systemd:
+    name: wg-quick@wg0
+    state: started
+    enabled: true
+
+- name: Verify tunnel — ping server
+  ansible.builtin.command: ping -c 3 -W 5 10.66.66.1
+  changed_when: false
+  register: ping_result
+  ignore_errors: true
+
+- name: Verify tunnel — Binance API
+  ansible.builtin.uri:
+    url: https://api.binance.com/api/v3/ping
+    timeout: 10
+  register: binance_check
+  ignore_errors: true
+
+- name: VPN setup summary
+  ansible.builtin.debug:
+    msg: |
+      === Dev VPN Summary ===
+      Tunnel: {{ 'UP' if ping_result is succeeded else 'DOWN — check wg show' }}
+      Binance API: {{ 'REACHABLE' if binance_check is succeeded else 'UNREACHABLE — check routes' }}
+      Client public key: {{ wg_client_public_key }}

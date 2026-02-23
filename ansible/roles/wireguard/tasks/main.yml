@@ -1,0 +1,57 @@
+---
+- name: Install WireGuard
+  ansible.builtin.apt:
+    name: wireguard
+    state: present
+    update_cache: true
+
+- name: Generate server private key
+  ansible.builtin.shell: wg genkey | tee /etc/wireguard/server_private.key | wg pubkey > /etc/wireguard/server_public.key
+  args:
+    creates: /etc/wireguard/server_private.key
+
+- name: Set private key permissions
+  ansible.builtin.file:
+    path: /etc/wireguard/server_private.key
+    mode: "0600"
+
+- name: Read server private key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/server_private.key
+  register: wg_server_private_key_file
+
+- name: Read server public key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/server_public.key
+  register: wg_server_public_key_file
+
+- name: Set server key facts
+  ansible.builtin.set_fact:
+    wg_server_private_key: "{{ wg_server_private_key_file.content | b64decode | trim }}"
+    wg_server_public_key: "{{ wg_server_public_key_file.content | b64decode | trim }}"
+
+- name: Enable IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_file: /etc/sysctl.d/99-wireguard.conf
+    reload: true
+
+- name: Deploy WireGuard server config
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: "0600"
+  notify: restart wireguard
+
+- name: Enable and start WireGuard
+  ansible.builtin.systemd:
+    name: wg-quick@wg0
+    state: started
+    enabled: true
+
+- name: Display server public key
+  ansible.builtin.debug:
+    msg: >
+      WireGuard server public key (save this for client config):
+      {{ wg_server_public_key }}
