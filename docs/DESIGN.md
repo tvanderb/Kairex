@@ -1041,3 +1041,83 @@ scripts/
 **Primary:** Grafana dashboards and alerting via the observability stack. Logs, traces, and metrics for every system component. Operator monitors system health through dashboards.
 
 **Secondary:** Private Telegram channel for operator alerts — system health notifications, delivery failures, persistent errors. Low-volume, high-signal. Fires only when something needs human attention.
+
+### Testing & CI
+
+Testing infrastructure goes in with the first line of code. CI runs on every push from the first buildable commit.
+
+#### Unit Tests
+
+Written alongside every module using Rust's built-in `#[test]` and `pytest` for Python.
+
+**Storage layer** — highest value tests. Insert candles and query back, insert system output and extract setups, verify superseding logic, verify tiered retention aggregation (12 5m candles → one 1h candle). Run against in-memory SQLite — fast, no disk IO.
+
+**Config parsing** — deserialize each TOML config into its Rust struct. Verify defaults, verify validation catches bad values.
+
+**JSON serialization boundary** — the Rust/Python contract. Serialize sample data the way Rust pipes to Python, verify shape. Deserialize sample Python output into Rust structs. Uses fixture files representing the contract.
+
+**Alert condition evaluation** — pure logic, no IO. Given indicator values and trigger conditions, does this setup fire? Does this system rule fire? Does deduplication work?
+
+**LLM structured output parsing** — deserialize saved LLM responses (fixtures) into Rust structs. Verify all fields parse. Verify schema version handling. Verify responses missing new optional fields still parse (forward compatibility via `#[serde(default)]`).
+
+**Free channel routing** — given significance scores and routing config, does the report get routed? Pure logic, exhaustively testable.
+
+**Python indicator tests** — `pytest` for computation scripts. Given sample candle data, do RSI/Bollinger/MACD compute correctly? Verify against known values.
+
+#### Integration Test Fixtures
+
+```
+tests/fixtures/
+  binance/
+    kline_ws_message.json
+    kline_rest_response.json
+    funding_rate_response.json
+    open_interest_response.json
+  python/
+    compute_indicators_input.json
+    compute_indicators_output.json
+    build_context_input.json
+    build_context_output.json
+  llm/
+    morning_report_response.json
+    midday_report_response.json
+    evening_report_response.json
+    alert_response.json
+    weekly_report_response.json
+  config/
+    assets.toml
+    schedules.toml
+    thresholds.toml
+```
+
+Fixtures are the contract. If any layer changes its output shape, the downstream fixture test breaks.
+
+#### Integration Tests
+
+Heavier tests exercising multiple layers with mocked external services. Separate target — `cargo test --test integration`.
+
+- **Collection → Storage:** Feed mock WebSocket messages through the collection layer, verify they land in SQLite correctly.
+- **Storage → Python → Evaluation:** Load fixture data into SQLite, run the real Python subprocess, feed results into evaluation logic, verify alert decisions.
+- **Full report pipeline (mocked LLM):** Run the entire 12-step pipeline with a mock Anthropic API returning fixture responses. Verify report stored, setups extracted, delivery formatting correct.
+
+#### CI — GitHub Actions
+
+On every push and PR:
+
+```
+1. cargo fmt --check            # formatting
+2. cargo clippy -- -D warnings  # lints
+3. cargo test                   # unit tests
+4. cargo test --test integration # integration tests
+5. cd scripts && pytest         # Python tests
+```
+
+Full suite targets under 2 minutes. CI caches `target/` and Python venv between runs.
+
+#### Dry-Run Mode
+
+Config-level toggle. Runs the full pipeline but posts to a test Telegram channel (or logs the formatted message) instead of real channels. Enables end-to-end verification without affecting subscribers.
+
+#### What's NOT in CI
+
+Live API verification — real Binance WebSocket, real Anthropic calls, real Telegram delivery. These are manual checkpoints during development, documented in the roadmap as verification steps at specific milestones.
