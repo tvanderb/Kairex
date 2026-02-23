@@ -1,0 +1,6 @@
+[package]
+name = "kairex"
+version = "0.1.0"
+edition = "2021"
+description = "AI-powered crypto market analysis engine"
+license = "AGPL-3.0-only"

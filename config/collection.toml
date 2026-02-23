@@ -1,0 +1,43 @@
+# Collection layer configuration — polling intervals, WebSocket config, retention.
+
+[websocket]
+# Binance combined stream. ~9 assets x 3 timeframes = ~27 streams.
+# Well within Binance's 200-stream limit.
+timeframes = ["5m", "1h", "1d"]
+
+# Binance drops connections every 24h — automatic reconnection.
+reconnect_delay_ms = 1000
+reconnect_max_delay_ms = 30000
+reconnect_backoff_multiplier = 2.0
+
+[polling.funding_rates]
+interval_minutes = 480    # Every 8h (00:00/08:00/16:00 UTC)
+source = "binance_futures"
+endpoint = "/fapi/v1/fundingRate"
+
+[polling.open_interest]
+interval_minutes = 60     # Hourly
+source = "binance_futures"
+endpoint = "/fapi/v1/openInterest"
+
+[polling.fear_greed]
+interval_minutes = 1440   # Daily
+source = "alternative_me"
+
+[polling.dominance]
+interval_minutes = 1440   # Daily (CoinGecko caches every 10min)
+source = "coingecko"
+
+[retry]
+max_attempts = 3
+initial_delay_ms = 1000
+backoff_multiplier = 2.0
+
+[retention]
+# Tiered candle retention policy.
+candles_5m_days = 30
+candles_1h_days = 365
+candles_1d_years = 7
+
+# Aggregation and pruning runs daily. Aggregate before prune.
+aggregation_schedule = "04:00"   # UTC, low-activity period

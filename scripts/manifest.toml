@@ -1,0 +1,18 @@
+[compute_indicators]
+description = "Compute technical indicators for live evaluation"
+
+[compute_indicators.data]
+candles_5m = { periods = 100 }
+candles_1h = { periods = 50 }
+candles_1d = { periods = 30 }
+
+[build_context]
+description = "Build pre-computed numerical context for LLM reports"
+
+[build_context.data]
+candles_5m = { periods = 288 }      # 24h
+candles_1h = { periods = 168 }      # 7 days
+candles_1d = { periods = 90 }       # 90 days
+funding_rates = { periods = 90 }
+open_interest = { periods = 720 }   # 30 days hourly
+indices = { periods = 90 }

@@ -1,0 +1,12 @@
+[package]
+name = "kairex-bin"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+
+[[bin]]
+name = "kairex"
+path = "src/main.rs"
+
+[dependencies]
+kairex = { path = "../kairex" }

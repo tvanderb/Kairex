@@ -1,0 +1,15 @@
+{
+  "packages": [
+    "rustup@latest",
+    "python312@latest",
+    "just@latest",
+    "sqlite@latest",
+    "docker@latest"
+  ],
+  "shell": {
+    "init_hook": [
+      "rustup default stable 2>/dev/null",
+      "echo 'Kairex dev environment ready.'"
+    ]
+  }
+}

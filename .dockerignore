@@ -1,0 +1,12 @@
+target/
+.git/
+.devbox/
+.venv/
+__pycache__/
+*.pyc
+data/
+.env
+.claude_context
+docs/
+ansible/
+tests/

@@ -1,0 +1,3 @@
+[workspace]
+members = ["kairex", "kairex-bin"]
+resolver = "2"

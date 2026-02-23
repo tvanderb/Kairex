@@ -1,0 +1,9 @@
+# Local dev overrides — use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+services:
+  kairex:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - RUST_LOG=debug
+      - DRY_RUN=true

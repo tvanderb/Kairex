@@ -1,0 +1,63 @@
+services:
+  kairex:
+    build: .
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./config:/app/config:ro
+      - ./prompts:/app/prompts:ro
+      - ./data:/app/data
+    env_file: .env
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    depends_on:
+      - tempo
+      - prometheus
+      - loki
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - tempo-data:/tmp/tempo
+    ports:
+      - "4317:4317"   # OTLP gRPC
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "9091:9090"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+volumes:
+  grafana-data:
+  tempo-data:
+  prometheus-data:
+  loki-data:

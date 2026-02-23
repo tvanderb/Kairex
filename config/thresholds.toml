@@ -1,0 +1,21 @@
+# Alert cooldowns and system-level rule definitions.
+
+[cooldowns]
+# Per-asset per-alert-type cooldown to prevent spam when values hover near thresholds.
+setup_trigger_minutes = 60
+system_rule_minutes = 30
+
+# Overnight multiplier — cooldowns are extended during overnight hours.
+overnight_multiplier = 2.0
+
+[system_rules.volume_spike]
+condition = "volume_ratio_5m > 3.0"
+description = "Volume spike detected"
+
+[system_rules.rsi_extreme]
+condition = "rsi_14_1h < 20 OR rsi_14_1h > 80"
+description = "RSI at extreme levels"
+
+[system_rules.funding_extreme]
+condition = "abs(funding_rate) > 0.1"
+description = "Funding rate at extreme levels"

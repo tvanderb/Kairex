@@ -2,3 +2,8 @@
 .claude_context
 .env
 data/
+target/
+__pycache__/
+*.pyc
+.devbox/
+.venv/
