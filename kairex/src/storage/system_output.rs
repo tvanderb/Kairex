@@ -325,7 +325,7 @@ mod tests {
         db.with_writer(|conn| store_report(conn, &output, &setups))
             .unwrap();
 
-        let active = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let active = db.with_reader(query_active_setups).unwrap();
         assert_eq!(active.len(), 2);
     }
 
@@ -345,7 +345,7 @@ mod tests {
         db.with_writer(|conn| store_report(conn, &output2, &setups2))
             .unwrap();
 
-        let active = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let active = db.with_reader(query_active_setups).unwrap();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].asset, "BTCUSDT");
         assert_eq!(active[0].created_at, 2000);
@@ -371,7 +371,7 @@ mod tests {
         db.with_writer(|conn| store_report(conn, &output2, &setups2))
             .unwrap();
 
-        let active = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let active = db.with_reader(query_active_setups).unwrap();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].asset, "BTCUSDT");
     }
@@ -384,13 +384,13 @@ mod tests {
         db.with_writer(|conn| store_report(conn, &output, &setups))
             .unwrap();
 
-        let active = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let active = db.with_reader(query_active_setups).unwrap();
         let setup_id = active[0].id.unwrap();
 
         db.with_writer(|conn| resolve_setup(conn, setup_id, "triggered", 1500, 71000.0))
             .unwrap();
 
-        let remaining = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let remaining = db.with_reader(query_active_setups).unwrap();
         assert_eq!(remaining.len(), 0);
     }
 
@@ -469,7 +469,7 @@ mod tests {
             .with_writer(|conn| store_report(conn, &output, &setups))
             .unwrap();
 
-        let active = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let active = db.with_reader(query_active_setups).unwrap();
         let setup_id = active[0].id.unwrap();
 
         let alert = FiredAlert {
@@ -512,7 +512,7 @@ mod tests {
         db.with_writer(|conn| store_report(conn, &alert, &alert_setups))
             .unwrap();
 
-        let active = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let active = db.with_reader(query_active_setups).unwrap();
         // BTC superseded+new, ETH still active
         assert_eq!(active.len(), 2);
         let assets: Vec<&str> = active.iter().map(|s| s.asset.as_str()).collect();
@@ -538,7 +538,7 @@ mod tests {
         let outputs = db
             .with_reader(|conn| query_outputs_by_type(conn, "morning", 10))
             .unwrap();
-        let setups = db.with_reader(|conn| query_active_setups(conn)).unwrap();
+        let setups = db.with_reader(query_active_setups).unwrap();
         assert_eq!(outputs.len(), 1);
         assert_eq!(setups.len(), 1);
     }

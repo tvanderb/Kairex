@@ -1,0 +1,39 @@
+# Asset universe — major liquid crypto pairs against USDT on Binance.
+# Adding or removing an asset here propagates to all collectors,
+# analysis scripts, and delivery templates.
+
+[[assets]]
+symbol = "BTCUSDT"
+display = "BTC"
+
+[[assets]]
+symbol = "ETHUSDT"
+display = "ETH"
+
+[[assets]]
+symbol = "SOLUSDT"
+display = "SOL"
+
+[[assets]]
+symbol = "XRPUSDT"
+display = "XRP"
+
+[[assets]]
+symbol = "DOGEUSDT"
+display = "DOGE"
+
+[[assets]]
+symbol = "ADAUSDT"
+display = "ADA"
+
+[[assets]]
+symbol = "AVAXUSDT"
+display = "AVAX"
+
+[[assets]]
+symbol = "LINKUSDT"
+display = "LINK"
+
+[[assets]]
+symbol = "DOTUSDT"
+display = "DOT"

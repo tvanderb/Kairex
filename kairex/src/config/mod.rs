@@ -1,1 +1,18 @@
+mod assets;
+mod collection;
 
+pub use assets::{Asset, AssetsConfig};
+pub use collection::{CollectionConfig, PollEndpoint, PollingConfig, RetryConfig, WebSocketConfig};
+
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("config IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("config parse error: {0}")]
+    Parse(#[from] toml::de::Error),
+}
+
+pub type Result<T> = std::result::Result<T, ConfigError>;

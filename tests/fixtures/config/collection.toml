@@ -1,0 +1,30 @@
+# Collection layer configuration — polling intervals, WebSocket config.
+
+[websocket]
+timeframes = ["5m", "1h", "1d"]
+reconnect_delay_ms = 1000
+reconnect_max_delay_ms = 30000
+reconnect_backoff_multiplier = 2.0
+
+[polling.funding_rates]
+interval_minutes = 480
+source = "binance_futures"
+endpoint = "/fapi/v1/fundingRate"
+
+[polling.open_interest]
+interval_minutes = 60
+source = "binance_futures"
+endpoint = "/fapi/v1/openInterest"
+
+[polling.fear_greed]
+interval_minutes = 1440
+source = "alternative_me"
+
+[polling.dominance]
+interval_minutes = 1440
+source = "coingecko"
+
+[retry]
+max_attempts = 3
+initial_delay_ms = 1000
+backoff_multiplier = 2.0
