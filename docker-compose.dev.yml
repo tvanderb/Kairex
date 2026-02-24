@@ -4,6 +4,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file: .env.dev
     environment:
       - RUST_LOG=debug
-      - DRY_RUN=true

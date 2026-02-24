@@ -7,7 +7,7 @@ use kairex::config::{
 };
 use kairex::delivery::DeliveryLayer;
 use kairex::evaluation::EvaluationLayer;
-use kairex::llm::AnthropicClient;
+use kairex::llm::LlmClient;
 use kairex::orchestrator::Orchestrator;
 use kairex::scheduling::Scheduler;
 use kairex::storage::Database;
@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let eval_rx = evaluation.start();
 
     // Create pipeline components
-    let llm_client = AnthropicClient::new(llm_config)?;
+    let llm_client = LlmClient::new(llm_config)?;
     let delivery = DeliveryLayer::new(&delivery_config, free_channel_config, db.clone())?;
 
     // Run orchestrator (blocks forever)
@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
         .collect();
     let orchestrator = Orchestrator::new(
         db,
-        llm_client,
+        Box::new(llm_client),
         delivery,
         analysis_config,
         assets,

@@ -26,8 +26,11 @@ pytest:
 fmt:
     cargo fmt --all
 
-# Run the binary in dev mode
+# Run the binary in dev mode (loads .env.dev)
 dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -a; source .env.dev; set +a
     RUST_LOG=debug cargo run -p kairex-bin
 
 # Build Docker image

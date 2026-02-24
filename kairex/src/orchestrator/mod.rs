@@ -12,13 +12,13 @@ use crate::analysis;
 use crate::config::AnalysisConfig;
 use crate::delivery::{DeliveryLayer, Report};
 use crate::evaluation::EvalEvent;
-use crate::llm::{AnthropicClient, ReportType};
+use crate::llm::{LlmProvider, ReportType};
 use crate::scheduling::ScheduleEvent;
 use crate::storage::{extract_setups, Database, SystemOutput};
 
 pub struct Orchestrator {
     db: Database,
-    llm_client: AnthropicClient,
+    llm_client: Box<dyn LlmProvider>,
     delivery: DeliveryLayer,
     analysis_config: AnalysisConfig,
     assets: Vec<String>,
@@ -28,7 +28,7 @@ pub struct Orchestrator {
 impl Orchestrator {
     pub fn new(
         db: Database,
-        llm_client: AnthropicClient,
+        llm_client: Box<dyn LlmProvider>,
         delivery: DeliveryLayer,
         analysis_config: AnalysisConfig,
         assets: Vec<String>,

@@ -8,9 +8,8 @@ use crate::llm::api_types::{
     ApiErrorResponse, ContentBlock, Message, MessagesRequest, MessagesResponse, Tool, ToolChoice,
 };
 use crate::llm::schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
-use crate::llm::{LlmError, ReportType};
+use crate::llm::{LlmError, LlmProvider, Provider, ReportType};
 
-const ANTHROPIC_API_URL: &str = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
 /// Raw output from a successful LLM call.
@@ -22,17 +21,29 @@ pub struct LlmResponse {
     pub model: String,
 }
 
-pub struct AnthropicClient {
+pub struct LlmClient {
     http: reqwest::Client,
     config: LlmConfig,
+    provider: Provider,
     api_key: String,
 }
 
-impl AnthropicClient {
-    /// Create a new client. Reads `ANTHROPIC_API_KEY` from environment.
+impl LlmClient {
+    /// Create a new client. Reads the API key from the environment variable
+    /// corresponding to the configured provider.
     pub fn new(config: LlmConfig) -> Result<Self, LlmError> {
-        let api_key = std::env::var("ANTHROPIC_API_KEY").map_err(|_| {
-            LlmError::Config("ANTHROPIC_API_KEY environment variable not set".into())
+        let provider = Provider::parse(&config.provider).ok_or_else(|| {
+            LlmError::Config(format!(
+                "unknown LLM provider '{}' (expected 'anthropic' or 'openrouter')",
+                config.provider
+            ))
+        })?;
+
+        let api_key = std::env::var(provider.env_var()).map_err(|_| {
+            LlmError::Config(format!(
+                "{} environment variable not set",
+                provider.env_var()
+            ))
         })?;
 
         let http = reqwest::Client::builder()
@@ -42,13 +53,17 @@ impl AnthropicClient {
         Ok(Self {
             http,
             config,
+            provider,
             api_key,
         })
     }
+}
 
+#[async_trait::async_trait]
+impl LlmProvider for LlmClient {
     /// Generate a report for the given type and context.
     #[instrument(name = "llm.generate", skip(self, context, project_root), fields(report_type = ?report_type))]
-    pub async fn generate(
+    async fn generate(
         &self,
         report_type: ReportType,
         context: &serde_json::Value,
@@ -104,7 +119,8 @@ impl AnthropicClient {
             },
         };
 
-        let response = self.execute_with_retry(&request, ANTHROPIC_API_URL).await?;
+        let api_url = self.provider.api_url();
+        let response = self.execute_with_retry(&request, api_url).await?;
         let output = Self::extract_tool_output(&response)?;
 
         Ok(LlmResponse {
@@ -114,7 +130,9 @@ impl AnthropicClient {
             model: response.model,
         })
     }
+}
 
+impl LlmClient {
     /// Execute a request with retry on 429/5xx/timeout.
     async fn execute_with_retry(
         &self,
@@ -132,15 +150,22 @@ impl AnthropicClient {
                 debug!(attempt, max_retries, "retrying LLM request");
             }
 
-            let result = self
+            let mut req = self
                 .http
                 .post(api_url)
-                .header("x-api-key", &self.api_key)
-                .header("anthropic-version", ANTHROPIC_VERSION)
                 .header("content-type", "application/json")
-                .json(request)
-                .send()
-                .await;
+                .json(request);
+
+            req = match self.provider {
+                Provider::Anthropic => req
+                    .header("x-api-key", &self.api_key)
+                    .header("anthropic-version", ANTHROPIC_VERSION),
+                Provider::OpenRouter => {
+                    req.header("Authorization", format!("Bearer {}", self.api_key))
+                }
+            };
+
+            let result = req.send().await;
 
             match result {
                 Ok(response) => {
@@ -352,7 +377,7 @@ mod tests {
     fn extract_tool_output_success() {
         let fixture = load_fixture("anthropic_response.json");
         let response: MessagesResponse = serde_json::from_str(&fixture).unwrap();
-        let output = AnthropicClient::extract_tool_output(&response).unwrap();
+        let output = LlmClient::extract_tool_output(&response).unwrap();
         assert_eq!(output["regime_status"], "range_bound");
         assert_eq!(output["assets"].as_array().unwrap().len(), 5);
     }
@@ -371,7 +396,7 @@ mod tests {
                 output_tokens: 5,
             },
         };
-        let err = AnthropicClient::extract_tool_output(&response).unwrap_err();
+        let err = LlmClient::extract_tool_output(&response).unwrap_err();
         assert!(matches!(err, LlmError::SchemaValidation(_)));
     }
 
@@ -414,6 +439,7 @@ mod tests {
 
     fn test_config() -> LlmConfig {
         LlmConfig {
+            provider: "anthropic".into(),
             model: "claude-opus-4-20250514".into(),
             max_tokens: 8192,
             temperature: 0.3,
@@ -448,9 +474,10 @@ mod tests {
             .await;
 
         let config = test_config();
-        let client = AnthropicClient {
+        let client = LlmClient {
             http: reqwest::Client::new(),
             config,
+            provider: Provider::Anthropic,
             api_key: "test-key".into(),
         };
 
@@ -477,7 +504,7 @@ mod tests {
 
         let api_url = format!("{}/v1/messages", mock_server.uri());
         let response = client.execute_with_retry(&request, &api_url).await.unwrap();
-        let output = AnthropicClient::extract_tool_output(&response).unwrap();
+        let output = LlmClient::extract_tool_output(&response).unwrap();
 
         // Verify it deserializes to MorningReport
         let report: MorningReport = serde_json::from_value(output).unwrap();
@@ -513,9 +540,10 @@ mod tests {
             .await;
 
         let config = test_config();
-        let client = AnthropicClient {
+        let client = LlmClient {
             http: reqwest::Client::new(),
             config,
+            provider: Provider::Anthropic,
             api_key: "test-key".into(),
         };
 
@@ -558,9 +586,10 @@ mod tests {
             .await;
 
         let config = test_config();
-        let client = AnthropicClient {
+        let client = LlmClient {
             http: reqwest::Client::new(),
             config,
+            provider: Provider::Anthropic,
             api_key: "test-key".into(),
         };
 
@@ -625,10 +654,63 @@ mod tests {
             .await;
 
         let config = test_config();
-        let client = AnthropicClient {
+        let client = LlmClient {
             http: reqwest::Client::new(),
             config,
+            provider: Provider::Anthropic,
             api_key: "test-key".into(),
+        };
+
+        let request = MessagesRequest {
+            model: "claude-opus-4-20250514".into(),
+            max_tokens: 8192,
+            temperature: 0.3,
+            system: "test".into(),
+            messages: vec![Message {
+                role: "user".into(),
+                content: "{}".into(),
+            }],
+            tools: vec![Tool {
+                name: "morning_report".into(),
+                description: "test".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+            }],
+            tool_choice: ToolChoice {
+                choice_type: "tool".into(),
+                name: "morning_report".into(),
+            },
+        };
+
+        let api_url = format!("{}/v1/messages", mock_server.uri());
+        let response = client.execute_with_retry(&request, &api_url).await.unwrap();
+        assert_eq!(response.stop_reason, "tool_use");
+    }
+
+    #[tokio::test]
+    async fn openrouter_sends_bearer_auth() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        let fixture = load_fixture("anthropic_response.json");
+
+        // Expect Bearer auth header (OpenRouter uses standard Authorization header)
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/v1/messages"))
+            .and(wiremock::matchers::header(
+                "Authorization",
+                "Bearer or-test-key",
+            ))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(&fixture))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let mut config = test_config();
+        config.provider = "openrouter".into();
+        let client = LlmClient {
+            http: reqwest::Client::new(),
+            config,
+            provider: Provider::OpenRouter,
+            api_key: "or-test-key".into(),
         };
 
         let request = MessagesRequest {

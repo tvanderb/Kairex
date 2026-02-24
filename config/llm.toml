@@ -1,8 +1,11 @@
-# LLM client configuration — Anthropic Messages API.
-# API key is read from ANTHROPIC_API_KEY env var, not stored here.
+# LLM client configuration.
+# API key is read from the env var matching the provider:
+#   anthropic   → ANTHROPIC_API_KEY
+#   openrouter  → OPENROUTER_API_KEY
 
-model = "claude-opus-4-20250514"
-max_tokens = 8192
+provider = "openrouter"
+model = "anthropic/claude-opus-4.6"
+max_tokens = 16384
 temperature = 0.3
 timeout_seconds = 120
 

@@ -6,12 +6,18 @@ use super::ConfigError;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
+    #[serde(default = "default_provider")]
+    pub provider: String,
     pub model: String,
     pub max_tokens: u32,
     pub temperature: f64,
     pub timeout_seconds: u64,
     pub prompts_dir: String,
     pub retry: LlmRetryConfig,
+}
+
+fn default_provider() -> String {
+    "anthropic".into()
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -3,9 +3,56 @@ pub mod client;
 pub mod schemas;
 pub mod types;
 
-pub use client::{AnthropicClient, LlmResponse};
+pub use client::{LlmClient, LlmResponse};
 pub use schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
 pub use types::*;
+
+use std::path::Path;
+
+/// Which LLM API backend to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provider {
+    Anthropic,
+    OpenRouter,
+}
+
+impl Provider {
+    /// Parse from config string ("anthropic" or "openrouter").
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "anthropic" => Some(Self::Anthropic),
+            "openrouter" => Some(Self::OpenRouter),
+            _ => None,
+        }
+    }
+
+    /// Environment variable name for the API key.
+    pub fn env_var(&self) -> &'static str {
+        match self {
+            Self::Anthropic => "ANTHROPIC_API_KEY",
+            Self::OpenRouter => "OPENROUTER_API_KEY",
+        }
+    }
+
+    /// Base URL for the messages API.
+    pub fn api_url(&self) -> &'static str {
+        match self {
+            Self::Anthropic => "https://api.anthropic.com/v1/messages",
+            Self::OpenRouter => "https://openrouter.ai/api/v1/messages",
+        }
+    }
+}
+
+/// Trait for LLM providers — the interface the orchestrator depends on.
+#[async_trait::async_trait]
+pub trait LlmProvider: Send + Sync {
+    async fn generate(
+        &self,
+        report_type: ReportType,
+        context: &serde_json::Value,
+        project_root: &Path,
+    ) -> Result<LlmResponse, LlmError>;
+}
 
 /// Errors from LLM API calls and response handling.
 #[derive(Debug, thiserror::Error)]
@@ -262,5 +309,31 @@ mod tests {
         let serialized = serde_json::to_string(&report).unwrap();
         let deserialized: MorningReport = serde_json::from_str(&serialized).unwrap();
         assert_eq!(report, deserialized);
+    }
+
+    #[test]
+    fn provider_parse() {
+        assert_eq!(Provider::parse("anthropic"), Some(Provider::Anthropic));
+        assert_eq!(Provider::parse("openrouter"), Some(Provider::OpenRouter));
+        assert_eq!(Provider::parse("unknown"), None);
+        assert_eq!(Provider::parse(""), None);
+    }
+
+    #[test]
+    fn provider_env_var() {
+        assert_eq!(Provider::Anthropic.env_var(), "ANTHROPIC_API_KEY");
+        assert_eq!(Provider::OpenRouter.env_var(), "OPENROUTER_API_KEY");
+    }
+
+    #[test]
+    fn provider_api_url() {
+        assert_eq!(
+            Provider::Anthropic.api_url(),
+            "https://api.anthropic.com/v1/messages"
+        );
+        assert_eq!(
+            Provider::OpenRouter.api_url(),
+            "https://openrouter.ai/api/v1/messages"
+        );
     }
 }
