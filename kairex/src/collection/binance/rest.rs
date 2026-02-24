@@ -1,5 +1,5 @@
 use reqwest::Client;
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::storage::{Candle, FundingRate, OpenInterest};
 
@@ -44,6 +44,7 @@ impl BinanceRestClient {
     }
 
     /// Fetch klines for a single page.
+    #[instrument(name = "collection.binance.fetch_klines", skip(self), fields(symbol = %symbol, interval = %interval))]
     pub async fn fetch_klines(
         &self,
         symbol: &str,
@@ -85,6 +86,7 @@ impl BinanceRestClient {
     }
 
     /// Fetch klines across a time range, auto-paginating through 1000-candle pages.
+    #[instrument(name = "collection.binance.fetch_klines_range", skip(self), fields(symbol = %symbol, interval = %interval))]
     pub async fn fetch_klines_range(
         &self,
         symbol: &str,
@@ -133,6 +135,7 @@ impl BinanceRestClient {
     }
 
     /// Fetch funding rate history for a symbol.
+    #[instrument(name = "collection.binance.fetch_funding_rates", skip(self), fields(symbol = %symbol))]
     pub async fn fetch_funding_rates(
         &self,
         symbol: &str,
@@ -164,6 +167,7 @@ impl BinanceRestClient {
     }
 
     /// Fetch current open interest for a symbol.
+    #[instrument(name = "collection.binance.fetch_open_interest", skip(self), fields(symbol = %symbol))]
     pub async fn fetch_open_interest(&self, symbol: &str) -> Result<OpenInterest> {
         let url = format!("{}/fapi/v1/openInterest?symbol={symbol}", self.futures_base);
 

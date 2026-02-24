@@ -1,5 +1,5 @@
 use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::collection::backfill::BackfillOrchestrator;
 use crate::collection::event::CollectionEvent;
@@ -53,6 +53,7 @@ impl BinanceWebSocket {
     }
 
     /// Main WebSocket loop: connect, listen, backfill on disconnect, reconnect with backoff.
+    #[instrument(name = "collection.websocket", skip_all)]
     pub async fn run(&self) {
         use crate::collection::binance::convert::ws_kline_to_candle;
         use crate::collection::binance::types::CombinedStreamMessage;

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use super::error::{DeliveryError, Result};
 
@@ -63,6 +63,7 @@ impl TelegramClient {
         self.send_message(&self.operator_chat_id, html).await
     }
 
+    #[instrument(name = "delivery.telegram.send", skip(self, html), fields(chat_id = %chat_id))]
     async fn send_message(&self, chat_id: &str, html: &str) -> Result<()> {
         let fragments = split_message(html);
         debug!(

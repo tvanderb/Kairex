@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
 
 use crate::analysis;
 use crate::config::{AnalysisConfig, EvaluationConfig};
@@ -76,12 +76,18 @@ impl EvaluationLayer {
                 Ok(count) => {
                     if count > 0 {
                         info!(events = count, "evaluation cycle complete");
+                        metrics::counter!("kairex_eval_cycles_total", "outcome" => "events_emitted")
+                            .increment(1);
                     } else {
                         debug!("evaluation cycle complete, no events");
+                        metrics::counter!("kairex_eval_cycles_total", "outcome" => "no_events")
+                            .increment(1);
                     }
                 }
                 Err(e) => {
                     warn!(error = %e, "evaluation cycle failed");
+                    metrics::counter!("kairex_eval_cycles_total", "outcome" => "error")
+                        .increment(1);
                 }
             }
             tokio::time::sleep(interval).await;
@@ -89,6 +95,7 @@ impl EvaluationLayer {
     }
 
     /// Run one evaluation cycle. Returns the number of events emitted.
+    #[instrument(name = "evaluation.cycle", skip_all)]
     pub async fn run_cycle(&self, tx: &mpsc::Sender<EvalEvent>) -> Result<usize> {
         let setups = db_blocking(&self.db, |db| db.query_active_setups()).await?;
         if setups.is_empty() {

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::collection::binance::BinanceRestClient;
 use crate::collection::error::CollectionError;
@@ -29,6 +29,7 @@ impl PollLoop {
     }
 
     /// Run the poll loop forever, calling `task_fn` at each interval.
+    #[instrument(name = "collection.poll", skip_all, fields(name = %self.name))]
     pub async fn run<F, Fut>(&self, task_fn: F)
     where
         F: Fn() -> Fut,

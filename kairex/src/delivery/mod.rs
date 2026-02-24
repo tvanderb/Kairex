@@ -7,7 +7,7 @@ pub use error::{DeliveryError, Result};
 pub use routing::{FreeChannelRouter, RouteDecision};
 pub use telegram::TelegramClient;
 
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
 use crate::config::{DeliveryConfig, FormatMode, FreeChannelConfig, SetupFormat};
 use crate::llm::schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
@@ -71,7 +71,9 @@ impl DeliveryLayer {
     }
 
     /// Deliver a report to premium channel, optionally to free channel, and update DB.
+    #[instrument(name = "delivery.deliver", skip(self, report), fields(report_type = ?report.report_type(), output_id))]
     pub async fn deliver(&self, report: &Report, output_id: i64) -> Result<()> {
+        let delivery_start = std::time::Instant::now();
         let sf = self.setup_format;
         let report_type = report.report_type();
         let now_ms = now_millis();
@@ -126,6 +128,14 @@ impl DeliveryLayer {
         }
 
         self.update_status(output_id, "delivered", now_ms);
+
+        let type_label = report_type
+            .tool_name()
+            .trim_end_matches("_report")
+            .to_string();
+        metrics::histogram!("kairex_delivery_duration_seconds", "report_type" => type_label)
+            .record(delivery_start.elapsed().as_secs_f64());
+
         Ok(())
     }
 

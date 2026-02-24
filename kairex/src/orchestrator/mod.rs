@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 use tokio::sync::mpsc;
-use tracing::{error, info};
+use tracing::{error, info, instrument};
 
 use crate::analysis;
 use crate::config::AnalysisConfig;
@@ -68,6 +68,11 @@ impl Orchestrator {
     }
 
     /// Handle a scheduled report: build full context, generate, store, deliver.
+    #[instrument(
+        name = "orchestrator.handle_schedule_event",
+        skip_all,
+        fields(report_type)
+    )]
     async fn handle_schedule_event(&self, event: ScheduleEvent) {
         let ScheduleEvent::GenerateReport { report_type, .. } = event;
 
@@ -79,8 +84,10 @@ impl Orchestrator {
             }
         };
 
+        tracing::Span::current().record("report_type", tracing::field::debug(&parsed));
         info!(?parsed, "handling scheduled report");
 
+        let context_start = std::time::Instant::now();
         let context = match analysis::build_context(
             &self.db,
             &self.assets,
@@ -89,7 +96,11 @@ impl Orchestrator {
         )
         .await
         {
-            Ok(ctx) => ctx,
+            Ok(ctx) => {
+                metrics::histogram!("kairex_context_build_duration_seconds")
+                    .record(context_start.elapsed().as_secs_f64());
+                ctx
+            }
             Err(e) => {
                 error!(error = %e, ?parsed, "failed to build context for scheduled report");
                 return;
@@ -102,6 +113,11 @@ impl Orchestrator {
     }
 
     /// Handle an eval event: build single-asset context + trigger metadata, generate alert, store, deliver.
+    #[instrument(
+        name = "orchestrator.handle_eval_event",
+        skip_all,
+        fields(asset, event_type)
+    )]
     async fn handle_eval_event(&self, event: EvalEvent) {
         let (setup, event_type, event_price) = match &event {
             EvalEvent::Triggered {
@@ -116,6 +132,10 @@ impl Orchestrator {
             } => (setup, "invalidated", *invalidation_price),
         };
 
+        let span = tracing::Span::current();
+        span.record("asset", setup.asset.as_str());
+        span.record("event_type", event_type);
+
         info!(
             asset = %setup.asset,
             event_type,
@@ -123,6 +143,7 @@ impl Orchestrator {
             "handling eval event"
         );
 
+        let context_start = std::time::Instant::now();
         let asset_list = vec![setup.asset.clone()];
         let mut context = match analysis::build_context(
             &self.db,
@@ -132,7 +153,11 @@ impl Orchestrator {
         )
         .await
         {
-            Ok(ctx) => ctx,
+            Ok(ctx) => {
+                metrics::histogram!("kairex_context_build_duration_seconds")
+                    .record(context_start.elapsed().as_secs_f64());
+                ctx
+            }
             Err(e) => {
                 error!(error = %e, asset = %setup.asset, "failed to build context for alert");
                 return;
@@ -163,15 +188,30 @@ impl Orchestrator {
     }
 
     /// Shared pipeline: LLM generate, store in DB, extract setups, deserialize, deliver.
+    #[instrument(name = "orchestrator.pipeline", skip(self, context), fields(report_type = ?report_type))]
     async fn run_pipeline(
         &self,
         report_type: ReportType,
         context: &serde_json::Value,
     ) -> Result<()> {
+        let pipeline_start = std::time::Instant::now();
+        let type_label = report_type
+            .tool_name()
+            .trim_end_matches("_report")
+            .to_string();
+
+        // LLM generate
+        let llm_start = std::time::Instant::now();
         let llm_response = self
             .llm_client
             .generate(report_type, context, &self.project_root)
             .await?;
+        metrics::histogram!("kairex_llm_duration_seconds", "report_type" => type_label.clone())
+            .record(llm_start.elapsed().as_secs_f64());
+        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "direction" => "input")
+            .increment(llm_response.input_tokens as u64);
+        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "direction" => "output")
+            .increment(llm_response.output_tokens as u64);
 
         info!(
             ?report_type,
@@ -185,10 +225,7 @@ impl Orchestrator {
         // Store raw output
         let output = SystemOutput {
             id: None,
-            report_type: report_type
-                .tool_name()
-                .trim_end_matches("_report")
-                .to_string(),
+            report_type: type_label.clone(),
             generated_at: now,
             schema_version: "v1".to_string(),
             output: llm_response.output.clone(),
@@ -209,9 +246,28 @@ impl Orchestrator {
         // Deserialize into typed Report for delivery
         let report = deserialize_report(report_type, &llm_response.output)?;
 
-        self.delivery.deliver(&report, output_id).await?;
+        match self.delivery.deliver(&report, output_id).await {
+            Ok(()) => {
+                metrics::counter!("kairex_reports_generated_total", "report_type" => type_label.clone())
+                    .increment(1);
+                metrics::counter!("kairex_reports_delivered_total", "report_type" => type_label.clone(), "status" => "success")
+                    .increment(1);
+            }
+            Err(e) => {
+                metrics::counter!("kairex_reports_generated_total", "report_type" => type_label.clone())
+                    .increment(1);
+                metrics::counter!("kairex_reports_delivered_total", "report_type" => type_label.clone(), "status" => "failed")
+                    .increment(1);
+                metrics::histogram!("kairex_pipeline_duration_seconds", "report_type" => type_label)
+                    .record(pipeline_start.elapsed().as_secs_f64());
+                return Err(e.into());
+            }
+        }
 
         info!(?report_type, output_id, "delivery complete");
+
+        metrics::histogram!("kairex_pipeline_duration_seconds", "report_type" => type_label)
+            .record(pipeline_start.elapsed().as_secs_f64());
 
         Ok(())
     }

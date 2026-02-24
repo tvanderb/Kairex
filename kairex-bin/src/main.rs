@@ -14,7 +14,7 @@ use kairex::storage::Database;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
+    let _otel_guard = kairex::observability::init();
 
     let project_root = PathBuf::from(".");
     let config_dir = project_root.join("config");

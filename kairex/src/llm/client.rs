@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use crate::config::LlmConfig;
 use crate::llm::api_types::{
@@ -47,6 +47,7 @@ impl AnthropicClient {
     }
 
     /// Generate a report for the given type and context.
+    #[instrument(name = "llm.generate", skip(self, context, project_root), fields(report_type = ?report_type))]
     pub async fn generate(
         &self,
         report_type: ReportType,

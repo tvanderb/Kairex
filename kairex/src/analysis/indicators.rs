@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use serde_json::json;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use super::error::{AnalysisError, Result};
 use super::subprocess::run_python_script;
@@ -21,6 +21,7 @@ const TIMEFRAMES: &[&str] = &["5m", "1h", "1d"];
 /// 3. Trims output to `context_periods` per the analysis config
 ///
 /// Returns the raw JSON output from the Python script, trimmed.
+#[instrument(name = "analysis.compute_indicators", skip_all, fields(assets = assets.len()))]
 pub async fn compute_indicators(
     db: &Database,
     assets: &[String],

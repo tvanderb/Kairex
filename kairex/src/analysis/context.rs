@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use serde_json::json;
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use super::error::{AnalysisError, Result};
 use super::subprocess::run_python_script;
@@ -28,6 +28,7 @@ const INDEX_TYPES: &[&str] = &[
 /// 1. Queries candles, funding rates, open interest, and indices from storage
 /// 2. Calls `build_context.py` as a subprocess
 /// 3. Returns the structured context JSON
+#[instrument(name = "analysis.build_context", skip_all, fields(assets = assets.len()))]
 pub async fn build_context(
     db: &Database,
     assets: &[String],

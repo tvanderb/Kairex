@@ -1,4 +1,4 @@
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
 use crate::collection::binance::BinanceRestClient;
 use crate::collection::error::Result;
@@ -374,6 +374,7 @@ impl BackfillOrchestrator {
     }
 
     /// Run all backfill operations.
+    #[instrument(name = "collection.backfill", skip_all)]
     pub async fn backfill_all(
         &self,
         assets: &[String],

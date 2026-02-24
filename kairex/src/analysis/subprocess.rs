@@ -3,13 +3,14 @@ use std::process::Stdio;
 
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use super::error::{AnalysisError, Result};
 
 /// Run a Python script as a subprocess, sending JSON on stdin and reading JSON from stdout.
 ///
 /// Returns the parsed JSON output on success.
+#[instrument(name = "analysis.subprocess", skip(project_root, venv_path, input, timeout_seconds), fields(script = %script))]
 pub async fn run_python_script(
     project_root: &Path,
     venv_path: &str,

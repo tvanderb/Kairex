@@ -15,6 +15,13 @@ tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "registry"] }
+tracing-opentelemetry = "0.32"
+opentelemetry = "0.31"
+opentelemetry_sdk = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.18"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
