@@ -5,5 +5,6 @@ pub mod delivery;
 pub mod evaluation;
 pub mod llm;
 pub mod observability;
+pub mod orchestrator;
 pub mod scheduling;
 pub mod storage;
