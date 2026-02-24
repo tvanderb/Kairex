@@ -1,0 +1,118 @@
+{
+  "regime_status": "range_bound",
+  "regime_duration_days": 11,
+  "regime_narrative": "Range-bound for 11 days now. BTC $66,300-$69,400 with declining volume. The longer this consolidation runs, the more significant the eventual resolution. No directional bias yet.",
+  "scorecard_summary": {
+    "total_setups": 14,
+    "triggered": 6,
+    "invalidated": 3,
+    "expired": 5,
+    "hit_rate": 0.67,
+    "by_confidence": [
+      {
+        "level": "high",
+        "count": 4,
+        "hit_rate": 0.75
+      },
+      {
+        "level": "moderate",
+        "count": 6,
+        "hit_rate": 0.67
+      },
+      {
+        "level": "low",
+        "count": 4,
+        "hit_rate": 0.5
+      }
+    ],
+    "narrative": "Solid week. 67% hit rate on triggered setups. High-confidence calls continue to outperform. Two of the three invalidations were wrong_level — triggers set 1-2% too tight. That's a pattern to watch."
+  },
+  "week_narrative": "This was a week about ETH. Monday's funding creep set up Tuesday's liquidation cascade. The rest of the week was about whether the damage was done. It was — $1,820 held cleanly, and by Friday ETH had recovered 60% of the move. BTC did nothing all week, which is its own kind of data point. SOL continues relative strength but hasn't broken out.",
+  "regime_assessment": "No regime change. The consolidation is aging — 11 days is long for crypto. Volume declining, Bollinger bandwidth compressing. The setup for a volatility expansion is building but there's no directional signal yet. The range is well-defined and respected.",
+  "what_would_change_my_mind": "Range-bound thesis holds until proven otherwise. A daily close above $70,000 with rising OI would make me bullish. A daily close below $65,000 on elevated volume would turn me bearish. Until one of those happens, this is a range and should be traded as one.",
+  "setups": [
+    {
+      "asset": "BTCUSDT",
+      "direction": "long",
+      "trigger_condition": "price_above",
+      "trigger_level": 70000.0,
+      "trigger_field": null,
+      "target_level": 74000.0,
+      "invalidation_level": 67000.0,
+      "confidence": 0.6,
+      "timeframe": "swing",
+      "narrative": "Range breakout setup. Daily close above $70K with OI confirmation. This is the bull resolution of the 11-day range."
+    },
+    {
+      "asset": "BTCUSDT",
+      "direction": "short",
+      "trigger_condition": "price_below",
+      "trigger_level": 65000.0,
+      "trigger_field": null,
+      "target_level": 61000.0,
+      "invalidation_level": 68000.0,
+      "confidence": 0.55,
+      "timeframe": "swing",
+      "narrative": "Range breakdown setup. Daily close below $65K on volume. The bear resolution."
+    },
+    {
+      "asset": "ETHUSDT",
+      "direction": "long",
+      "trigger_condition": "indicator_below",
+      "trigger_level": 30.0,
+      "trigger_field": "rsi_14_1h",
+      "target_level": 1950.0,
+      "invalidation_level": 1780.0,
+      "confidence": 0.5,
+      "timeframe": "swing",
+      "narrative": "Mean reversion if RSI gets oversold on the hourly. Post-cascade recovery has been reliable — 3 of last 4 RSI oversold signals on ETH led to 3%+ bounces within 48h."
+    }
+  ],
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "narrative": "Range-bound, day 11. $66,300-$69,400 with declining volume. Bollinger bandwidth compressing to levels that typically precede 5%+ moves. No directional bias — watching for the breakout."
+    },
+    {
+      "symbol": "ETHUSDT",
+      "narrative": "Recovering from Tuesday's liquidation cascade. $1,862 with funding normalizing. Showed relative weakness all week — underperformed BTC by 3%. Worth watching whether the recovery has legs or if this is just a dead cat bounce."
+    },
+    {
+      "symbol": "SOLUSDT",
+      "narrative": "Three consecutive weeks of relative strength. Diverging from the alt pack. $141 with the $144 resistance still unbroken. The persistence of the relative strength makes the eventual breakout more interesting."
+    },
+    {
+      "symbol": "XRPUSDT",
+      "narrative": "Nothing to say. Range-bound with BTC, no independent price action."
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "narrative": "Drifting. No setup, no signal."
+    }
+  ],
+  "notebook": {
+    "beliefs": [
+      "BTC range-bound, day 11. Holding $66,300-$69,400 on declining volume.",
+      "ETH showing relative weakness vs BTC across all timeframes for 2 weeks.",
+      "SOL relative strength for 3 weeks, diverging from alt pack.",
+      "Bollinger bandwidth compression suggests volatility expansion imminent (1-2 weeks).",
+      "Funding rates normalizing across the board — no directional pressure from derivatives.",
+      "Range resolution will likely be violent given the compression duration."
+    ],
+    "biases": [
+      "Calling ETH breakdowns too early on funding signals alone. Funding + declining OI has been unreliable (2/7 hit rate).",
+      "Breakout trigger levels consistently 1-2% too tight. 4 of last 6 breakout misses came within 1% of trigger before reversing.",
+      "Tendency to overweight SOL relative strength — it's been right but the breakout hasn't materialized."
+    ],
+    "hypotheses": [
+      "Range resolves upward if BTC closes above $70K with rising OI (stated week 2, still active, no evidence yet).",
+      "ETH underperformance is institutional rotation, not fundamental weakness (stated week 2, evidence mixed — funding normalized but relative weakness persists).",
+      "Bollinger bandwidth at current levels has preceded 5%+ moves within 2 weeks in 4 of last 5 instances (stated this week, tracking)."
+    ]
+  },
+  "significance": {
+    "magnitude": 0.5,
+    "surprise": 0.3,
+    "regime_relevance": 0.4
+  }
+}

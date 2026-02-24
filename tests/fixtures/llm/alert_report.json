@@ -1,0 +1,25 @@
+{
+  "asset": "ETHUSDT",
+  "trigger_summary": "ETH broke $1,880 on 2.8x volume. Liquidation cluster triggered.",
+  "context_narrative": "This is the setup flagged in this morning's pre-market. Funding was creeping up (+0.067%) and the $22M long liquidation cluster at $1,880 is now being flushed. Forced selling is accelerating the move.",
+  "watch_narrative": "Next support $1,820. Watch for a volume climax to signal the flush is done. If $1,820 breaks, $1,760 is the next cluster. BTC holding its range so far — if it slips below $67,000 in sympathy, the flush gets uglier.",
+  "setups": [
+    {
+      "asset": "ETHUSDT",
+      "direction": "short",
+      "trigger_condition": "price_below",
+      "trigger_level": 1820.0,
+      "trigger_field": null,
+      "target_level": 1760.0,
+      "invalidation_level": 1880.0,
+      "confidence": 0.5,
+      "timeframe": "intraday",
+      "narrative": "If the first cluster didn't absorb all the selling, $1,820 is next. Cascade setups are lower confidence — the first move often exhausts it."
+    }
+  ],
+  "significance": {
+    "magnitude": 0.75,
+    "surprise": 0.6,
+    "regime_relevance": 0.3
+  }
+}

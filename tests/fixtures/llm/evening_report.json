@@ -1,0 +1,60 @@
+{
+  "regime_status": "range_bound",
+  "regime_duration_days": 4,
+  "regime_narrative": "Range intact. ETH had a strong intraday move but BTC range held. No regime change.",
+  "scorecard": [
+    {
+      "asset": "ETHUSDT",
+      "direction": "short",
+      "trigger_level": 1880.0,
+      "outcome": "triggered",
+      "outcome_price": 1838.0,
+      "assessment": "hit",
+      "miss_reason": null,
+      "narrative": "Broke $1,880 at 10:47 AM on 3.2x volume. Liquidation cascade played out to $1,838. Clean move, clean hit."
+    },
+    {
+      "asset": "SOLUSDT",
+      "direction": "long",
+      "trigger_level": 144.0,
+      "outcome": "active",
+      "outcome_price": null,
+      "assessment": "pending",
+      "miss_reason": null,
+      "narrative": "Never triggered. Rejected at $143.50 and drifted to $140. Setup not invalidated — $138 was the line — but momentum clearly isn't there. Carrying forward with less conviction."
+    }
+  ],
+  "setups": [
+    {
+      "asset": "ETHUSDT",
+      "direction": "long",
+      "trigger_condition": "price_above",
+      "trigger_level": 1860.0,
+      "trigger_field": null,
+      "target_level": 1920.0,
+      "invalidation_level": 1820.0,
+      "confidence": 0.5,
+      "timeframe": "intraday",
+      "narrative": "After the flush, watching for a bounce. Funding hasn't reset yet (+0.058%) so risk remains, but the move was fast and volume climaxed."
+    },
+    {
+      "asset": "SOLUSDT",
+      "direction": "long",
+      "trigger_condition": "price_above",
+      "trigger_level": 144.0,
+      "trigger_field": null,
+      "target_level": 152.0,
+      "invalidation_level": 138.0,
+      "confidence": 0.35,
+      "timeframe": "swing",
+      "narrative": "Carrying forward. Needs momentum to return."
+    }
+  ],
+  "overnight_narrative": "ETH is the overnight story. Watch whether $1,850 holds through Asia or rolls over for another leg. Funding hasn't reset. BTC range continues — $66,300-$69,400. SOL setup valid but dormant.",
+  "market_narrative": "One call worked, one is pending. ETH broke $1,880 mid-morning exactly as described — the liquidation cascade played out to $1,838. Currently $1,862 in recovery. SOL didn't trigger. Rejected at $143.50 and drifted back to $140. Setup isn't invalidated but momentum isn't there. Day 4 of BTC range consolidation.",
+  "significance": {
+    "magnitude": 0.6,
+    "surprise": 0.4,
+    "regime_relevance": 0.25
+  }
+}

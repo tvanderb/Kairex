@@ -70,16 +70,18 @@ pub fn store_report(
         tx.execute(
             "INSERT INTO active_setups
                 (source_output_id, asset, direction, trigger_condition, trigger_level,
-                 target_level, invalidation_level, status, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'active', ?8)",
+                 trigger_field, target_level, invalidation_level, confidence, status, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'active', ?10)",
             params![
                 output_id,
                 setup.asset,
                 setup.direction,
                 setup.trigger_condition,
                 setup.trigger_level,
+                setup.trigger_field,
                 setup.target_level,
                 setup.invalidation_level,
+                setup.confidence,
                 setup.created_at,
             ],
         )?;
@@ -170,7 +172,8 @@ pub fn update_delivery_status(
 pub fn query_active_setups(conn: &Connection) -> Result<Vec<ActiveSetup>> {
     let mut stmt = conn.prepare(
         "SELECT id, source_output_id, asset, direction, trigger_condition, trigger_level,
-                target_level, invalidation_level, status, created_at, resolved_at, resolved_price
+                trigger_field, target_level, invalidation_level, confidence,
+                status, created_at, resolved_at, resolved_price
          FROM active_setups
          WHERE status = 'active'
          ORDER BY created_at",
@@ -187,7 +190,8 @@ pub fn query_active_setups(conn: &Connection) -> Result<Vec<ActiveSetup>> {
 pub fn query_active_setups_by_asset(conn: &Connection, asset: &str) -> Result<Vec<ActiveSetup>> {
     let mut stmt = conn.prepare(
         "SELECT id, source_output_id, asset, direction, trigger_condition, trigger_level,
-                target_level, invalidation_level, status, created_at, resolved_at, resolved_price
+                trigger_field, target_level, invalidation_level, confidence,
+                status, created_at, resolved_at, resolved_price
          FROM active_setups
          WHERE asset = ?1 AND status = 'active'
          ORDER BY created_at",
@@ -249,13 +253,62 @@ fn row_to_setup(row: &rusqlite::Row) -> rusqlite::Result<ActiveSetup> {
         direction: row.get(3)?,
         trigger_condition: row.get(4)?,
         trigger_level: row.get(5)?,
-        target_level: row.get(6)?,
-        invalidation_level: row.get(7)?,
-        status: row.get(8)?,
-        created_at: row.get(9)?,
-        resolved_at: row.get(10)?,
-        resolved_price: row.get(11)?,
+        trigger_field: row.get(6)?,
+        target_level: row.get(7)?,
+        invalidation_level: row.get(8)?,
+        confidence: row.get(9)?,
+        status: row.get(10)?,
+        created_at: row.get(11)?,
+        resolved_at: row.get(12)?,
+        resolved_price: row.get(13)?,
     })
+}
+
+/// Extract setups from a deserialized LLM report's `setups` array into storage rows.
+///
+/// Bridges LLM output → storage `ActiveSetup` rows. The `output_id` is the
+/// database ID of the system_output row this report was stored as.
+pub fn extract_setups(report: &serde_json::Value, output_id: i64, now: i64) -> Vec<ActiveSetup> {
+    let setups = match report.get("setups").and_then(|v| v.as_array()) {
+        Some(arr) => arr,
+        None => return Vec::new(),
+    };
+
+    setups
+        .iter()
+        .filter_map(|s| {
+            let asset = s.get("asset")?.as_str()?.to_string();
+            let direction = s.get("direction")?.as_str()?.to_string();
+            let trigger_condition = s.get("trigger_condition")?.as_str()?.to_string();
+            let trigger_level = s.get("trigger_level")?.as_f64()?;
+            let narrative = s.get("narrative")?.as_str()?;
+
+            // Validate required fields are non-empty
+            if asset.is_empty() || direction.is_empty() || narrative.is_empty() {
+                return None;
+            }
+
+            Some(ActiveSetup {
+                id: None,
+                source_output_id: output_id,
+                asset,
+                direction,
+                trigger_condition,
+                trigger_level,
+                trigger_field: s
+                    .get("trigger_field")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                target_level: s.get("target_level").and_then(|v| v.as_f64()),
+                invalidation_level: s.get("invalidation_level").and_then(|v| v.as_f64()),
+                confidence: s.get("confidence").and_then(|v| v.as_f64()),
+                status: "active".into(),
+                created_at: now,
+                resolved_at: None,
+                resolved_price: None,
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -289,8 +342,10 @@ mod tests {
             direction: "long".into(),
             trigger_condition: "price_above".into(),
             trigger_level: 70000.0,
+            trigger_field: None,
             target_level: Some(75000.0),
             invalidation_level: Some(65000.0),
+            confidence: Some(0.7),
             status: "active".into(),
             created_at,
             resolved_at: None,
@@ -541,5 +596,213 @@ mod tests {
         let setups = db.with_reader(query_active_setups).unwrap();
         assert_eq!(outputs.len(), 1);
         assert_eq!(setups.len(), 1);
+    }
+
+    #[test]
+    fn store_setup_with_trigger_field_and_confidence() {
+        let (_tmp, db) = test_db();
+        let output = make_output("morning", 1000);
+        let mut setup = make_setup("ETHUSDT", 1000);
+        setup.trigger_condition = "indicator_below".into();
+        setup.trigger_field = Some("rsi_14_1h".into());
+        setup.trigger_level = 30.0;
+        setup.confidence = Some(0.85);
+
+        db.with_writer(|conn| store_report(conn, &output, &[setup]))
+            .unwrap();
+
+        let active = db.with_reader(query_active_setups).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].trigger_condition, "indicator_below");
+        assert_eq!(active[0].trigger_field.as_deref(), Some("rsi_14_1h"));
+        assert_eq!(active[0].trigger_level, 30.0);
+        assert_eq!(active[0].confidence, Some(0.85));
+    }
+
+    #[test]
+    fn store_setup_without_optional_fields() {
+        let (_tmp, db) = test_db();
+        let output = make_output("alert", 1000);
+        let setup = ActiveSetup {
+            id: None,
+            source_output_id: 0,
+            asset: "BTCUSDT".into(),
+            direction: "long".into(),
+            trigger_condition: "price_above".into(),
+            trigger_level: 70000.0,
+            trigger_field: None,
+            target_level: None,
+            invalidation_level: None,
+            confidence: None,
+            status: "active".into(),
+            created_at: 1000,
+            resolved_at: None,
+            resolved_price: None,
+        };
+
+        db.with_writer(|conn| store_report(conn, &output, &[setup]))
+            .unwrap();
+
+        let active = db.with_reader(query_active_setups).unwrap();
+        assert_eq!(active.len(), 1);
+        assert!(active[0].trigger_field.is_none());
+        assert!(active[0].confidence.is_none());
+        assert!(active[0].target_level.is_none());
+    }
+
+    #[test]
+    fn extract_setups_from_report_json() {
+        let report: serde_json::Value = serde_json::from_str(
+            r#"{
+                "setups": [
+                    {
+                        "asset": "ETHUSDT",
+                        "direction": "short",
+                        "trigger_condition": "price_below",
+                        "trigger_level": 1880.0,
+                        "trigger_field": null,
+                        "target_level": 1820.0,
+                        "invalidation_level": 1950.0,
+                        "confidence": 0.72,
+                        "timeframe": "intraday",
+                        "narrative": "Test setup"
+                    },
+                    {
+                        "asset": "SOLUSDT",
+                        "direction": "long",
+                        "trigger_condition": "indicator_below",
+                        "trigger_level": 30.0,
+                        "trigger_field": "rsi_14_1h",
+                        "target_level": 152.0,
+                        "invalidation_level": 138.0,
+                        "confidence": 0.55,
+                        "timeframe": "swing",
+                        "narrative": "Indicator trigger"
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        let setups = extract_setups(&report, 42, 1000);
+        assert_eq!(setups.len(), 2);
+
+        assert_eq!(setups[0].source_output_id, 42);
+        assert_eq!(setups[0].asset, "ETHUSDT");
+        assert_eq!(setups[0].direction, "short");
+        assert_eq!(setups[0].trigger_condition, "price_below");
+        assert_eq!(setups[0].trigger_level, 1880.0);
+        assert!(setups[0].trigger_field.is_none());
+        assert_eq!(setups[0].target_level, Some(1820.0));
+        assert_eq!(setups[0].confidence, Some(0.72));
+        assert_eq!(setups[0].status, "active");
+        assert_eq!(setups[0].created_at, 1000);
+
+        assert_eq!(setups[1].asset, "SOLUSDT");
+        assert_eq!(setups[1].trigger_field.as_deref(), Some("rsi_14_1h"));
+        assert_eq!(setups[1].trigger_condition, "indicator_below");
+    }
+
+    #[test]
+    fn extract_setups_empty_array() {
+        let report: serde_json::Value = serde_json::from_str(r#"{"setups": []}"#).unwrap();
+        let setups = extract_setups(&report, 1, 1000);
+        assert!(setups.is_empty());
+    }
+
+    #[test]
+    fn extract_setups_missing_field() {
+        let report: serde_json::Value =
+            serde_json::from_str(r#"{"market_narrative": "no setups key"}"#).unwrap();
+        let setups = extract_setups(&report, 1, 1000);
+        assert!(setups.is_empty());
+    }
+
+    #[test]
+    fn extract_setups_skips_invalid_entries() {
+        let report: serde_json::Value = serde_json::from_str(
+            r#"{
+                "setups": [
+                    {
+                        "asset": "BTCUSDT",
+                        "direction": "long",
+                        "trigger_condition": "price_above",
+                        "trigger_level": 70000.0,
+                        "narrative": "Valid"
+                    },
+                    {
+                        "asset": "ETHUSDT",
+                        "direction": "short"
+                    }
+                ]
+            }"#,
+        )
+        .unwrap();
+
+        let setups = extract_setups(&report, 1, 1000);
+        assert_eq!(setups.len(), 1);
+        assert_eq!(setups[0].asset, "BTCUSDT");
+    }
+
+    #[test]
+    fn extract_setups_from_fixture() {
+        let path = format!(
+            "{}/tests/fixtures/llm/morning_report.json",
+            env!("CARGO_MANIFEST_DIR").trim_end_matches("/kairex")
+        );
+        let json = std::fs::read_to_string(&path).unwrap();
+        let report: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let setups = extract_setups(&report, 1, 1000);
+        assert_eq!(setups.len(), 2);
+        assert_eq!(setups[0].asset, "ETHUSDT");
+        assert_eq!(setups[0].confidence, Some(0.72));
+        assert_eq!(setups[1].asset, "SOLUSDT");
+    }
+
+    #[test]
+    fn extract_setups_stored_and_queried() {
+        let (_tmp, db) = test_db();
+        let path = format!(
+            "{}/tests/fixtures/llm/morning_report.json",
+            env!("CARGO_MANIFEST_DIR").trim_end_matches("/kairex")
+        );
+        let json = std::fs::read_to_string(&path).unwrap();
+        let report_json: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        let output = SystemOutput {
+            id: None,
+            report_type: "morning".into(),
+            generated_at: 1000,
+            schema_version: "v1".into(),
+            output: report_json.clone(),
+            delivered_at: None,
+            delivery_status: "pending".into(),
+        };
+
+        let output_id = db
+            .with_writer(|conn| store_report(conn, &output, &[]))
+            .unwrap();
+
+        let setups = extract_setups(&report_json, output_id, 1000);
+        assert_eq!(setups.len(), 2);
+
+        // Store extracted setups
+        let output2 = SystemOutput {
+            id: None,
+            report_type: "morning".into(),
+            generated_at: 2000,
+            schema_version: "v1".into(),
+            output: report_json,
+            delivered_at: None,
+            delivery_status: "pending".into(),
+        };
+        db.with_writer(|conn| store_report(conn, &output2, &setups))
+            .unwrap();
+
+        let active = db.with_reader(query_active_setups).unwrap();
+        assert_eq!(active.len(), 2);
+        assert_eq!(active[0].confidence, Some(0.72));
+        assert!(active[0].trigger_field.is_none());
     }
 }

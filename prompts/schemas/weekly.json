@@ -1,1 +1,254 @@
-{}
+{
+  "name": "weekly_report",
+  "description": "Sunday weekly briefing. The zoom-out. Scorecard, week narrative, regime assessment, thesis statement, week ahead setups, and analyst notebook update. The one report that earns 2-3 minutes of reading.",
+  "input_schema": {
+    "type": "object",
+    "required": [
+      "regime_status",
+      "regime_duration_days",
+      "regime_narrative",
+      "scorecard_summary",
+      "week_narrative",
+      "regime_assessment",
+      "what_would_change_my_mind",
+      "setups",
+      "assets",
+      "notebook",
+      "significance"
+    ],
+    "properties": {
+      "regime_status": {
+        "type": "string",
+        "enum": [
+          "trending_up",
+          "trending_down",
+          "range_bound",
+          "breakout",
+          "breakdown",
+          "volatile",
+          "uncertain"
+        ],
+        "description": "Current market regime classification at week's end."
+      },
+      "regime_duration_days": {
+        "type": "integer",
+        "description": "How many days the current regime has persisted."
+      },
+      "regime_narrative": {
+        "type": "string",
+        "description": "Weekly-level regime read. More considered than the daily — has the structure changed?"
+      },
+      "scorecard_summary": {
+        "type": "object",
+        "required": [
+          "total_setups",
+          "triggered",
+          "invalidated",
+          "expired",
+          "hit_rate",
+          "narrative"
+        ],
+        "properties": {
+          "total_setups": {
+            "type": "integer",
+            "description": "Total setups produced this week."
+          },
+          "triggered": {
+            "type": "integer",
+            "description": "Number of setups that triggered."
+          },
+          "invalidated": {
+            "type": "integer",
+            "description": "Number of setups invalidated."
+          },
+          "expired": {
+            "type": "integer",
+            "description": "Number of setups that expired without triggering."
+          },
+          "hit_rate": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Hit rate for triggered setups this week."
+          },
+          "by_confidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["level", "count", "hit_rate"],
+              "properties": {
+                "level": {
+                  "type": "string",
+                  "enum": ["high", "moderate", "low"],
+                  "description": "Confidence bucket."
+                },
+                "count": {
+                  "type": "integer",
+                  "description": "Number of setups in this confidence bucket."
+                },
+                "hit_rate": {
+                  "type": "number",
+                  "minimum": 0.0,
+                  "maximum": 1.0,
+                  "description": "Hit rate for this confidence bucket."
+                }
+              }
+            },
+            "description": "Performance breakdown by confidence level. Feeds calibration."
+          },
+          "narrative": {
+            "type": "string",
+            "description": "Honest take on the week's performance. What worked, what didn't, what was wrong and why."
+          }
+        },
+        "description": "Aggregated scorecard for the week. Lead with this — it's the hook."
+      },
+      "week_narrative": {
+        "type": "string",
+        "description": "The story of the week. Not day-by-day recap — the narrative arc. What was the week about?"
+      },
+      "regime_assessment": {
+        "type": "string",
+        "description": "Has the macro picture changed? Considered take on whether the trend structure is evolving."
+      },
+      "what_would_change_my_mind": {
+        "type": "string",
+        "description": "State the current thesis explicitly and what would invalidate it. Shows intellectual honesty."
+      },
+      "setups": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "asset",
+            "direction",
+            "trigger_condition",
+            "trigger_level",
+            "narrative"
+          ],
+          "properties": {
+            "asset": {
+              "type": "string",
+              "description": "Asset symbol."
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["long", "short", "neutral"],
+              "description": "Directional bias of the setup."
+            },
+            "trigger_condition": {
+              "type": "string",
+              "enum": [
+                "price_above",
+                "price_below",
+                "indicator_above",
+                "indicator_below"
+              ],
+              "description": "Condition type that activates this setup."
+            },
+            "trigger_level": {
+              "type": "number",
+              "description": "Price or indicator value that triggers the setup."
+            },
+            "trigger_field": {
+              "type": ["string", "null"],
+              "description": "For indicator triggers: indicator name. Null for price triggers."
+            },
+            "target_level": {
+              "type": "number",
+              "description": "Price target if the setup plays out."
+            },
+            "invalidation_level": {
+              "type": "number",
+              "description": "Price level that invalidates this setup."
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "description": "Confidence in this setup (0.0-1.0)."
+            },
+            "timeframe": {
+              "type": "string",
+              "enum": ["intraday", "swing", "position"],
+              "description": "Expected timeframe for this setup."
+            },
+            "narrative": {
+              "type": "string",
+              "description": "Week-ahead setup thesis."
+            }
+          }
+        },
+        "description": "Week ahead setups. The forward-looking payoff."
+      },
+      "assets": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["symbol", "narrative"],
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Asset symbol (e.g. BTCUSDT)."
+            },
+            "narrative": {
+              "type": "string",
+              "description": "Weekly-level read for this asset. Where does it stand heading into next week?"
+            }
+          }
+        },
+        "description": "Per-asset weekly reads."
+      },
+      "notebook": {
+        "type": "object",
+        "required": ["beliefs", "biases", "hypotheses"],
+        "properties": {
+          "beliefs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 8,
+            "description": "Current market beliefs. Max 8. Rewrite, don't append. Prune what's stale or fully integrated."
+          },
+          "biases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 5,
+            "description": "Self-identified analytical biases. Max 5. Honest assessment of where your analysis tends to go wrong."
+          },
+          "hypotheses": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 6,
+            "description": "Active hypotheses being tested. Max 6. Include when stated and current evidence status."
+          }
+        },
+        "description": "Analyst notebook update. Rewrite the entire notebook fresh — do not append. The notebook gives you continuity and self-awareness across sessions."
+      },
+      "significance": {
+        "type": "object",
+        "required": ["magnitude", "surprise", "regime_relevance"],
+        "properties": {
+          "magnitude": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "How significant in market terms."
+          },
+          "surprise": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "How unexpected given the current read."
+          },
+          "regime_relevance": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Does this potentially change the bigger picture."
+          }
+        },
+        "description": "Analytical significance ratings."
+      }
+    }
+  }
+}

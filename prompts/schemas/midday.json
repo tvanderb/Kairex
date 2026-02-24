@@ -1,1 +1,133 @@
-{}
+{
+  "name": "midday_report",
+  "description": "Midday update. Continuation of the morning read, not a fresh assessment. How the morning's calls are playing out, anything new developing, updated levels.",
+  "input_schema": {
+    "type": "object",
+    "required": [
+      "morning_reference_narrative",
+      "assets",
+      "setups",
+      "market_narrative",
+      "significance"
+    ],
+    "properties": {
+      "morning_reference_narrative": {
+        "type": "string",
+        "description": "How the morning's read is playing out. Tie this update to the morning report."
+      },
+      "assets": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["symbol", "narrative"],
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Asset symbol (e.g. BTCUSDT)."
+            },
+            "narrative": {
+              "type": "string",
+              "description": "Update for this asset since the morning report."
+            }
+          }
+        },
+        "description": "Per-asset updates. Brief when nothing changed, detailed when something developed."
+      },
+      "setups": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "asset",
+            "direction",
+            "trigger_condition",
+            "trigger_level",
+            "narrative"
+          ],
+          "properties": {
+            "asset": {
+              "type": "string",
+              "description": "Asset symbol (e.g. ETHUSDT)."
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["long", "short", "neutral"],
+              "description": "Directional bias of the setup."
+            },
+            "trigger_condition": {
+              "type": "string",
+              "enum": [
+                "price_above",
+                "price_below",
+                "indicator_above",
+                "indicator_below"
+              ],
+              "description": "Condition type that activates this setup."
+            },
+            "trigger_level": {
+              "type": "number",
+              "description": "Price or indicator value that triggers the setup."
+            },
+            "trigger_field": {
+              "type": ["string", "null"],
+              "description": "For indicator triggers: indicator name (e.g. 'rsi_14_1h'). Null for price triggers."
+            },
+            "target_level": {
+              "type": "number",
+              "description": "Price target if the setup plays out."
+            },
+            "invalidation_level": {
+              "type": "number",
+              "description": "Price level that invalidates this setup."
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "description": "Confidence in this setup (0.0-1.0). Be honest — this feeds calibration tracking."
+            },
+            "timeframe": {
+              "type": "string",
+              "enum": ["intraday", "swing", "position"],
+              "description": "Expected timeframe for this setup."
+            },
+            "narrative": {
+              "type": "string",
+              "description": "Why this setup matters. Updated or new setups from the midday reassessment."
+            }
+          }
+        },
+        "description": "Updated or new setups. Carry forward morning setups that are still valid (may adjust levels), add new ones, drop ones that are no longer relevant."
+      },
+      "market_narrative": {
+        "type": "string",
+        "description": "Overall midday editorial. Shortest of the three daily reports — brief when quiet, detailed when active."
+      },
+      "significance": {
+        "type": "object",
+        "required": ["magnitude", "surprise", "regime_relevance"],
+        "properties": {
+          "magnitude": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "How significant in market terms. Pure impact assessment."
+          },
+          "surprise": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "How unexpected given the current read."
+          },
+          "regime_relevance": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Does this potentially change the bigger picture."
+          }
+        },
+        "description": "Analytical significance ratings."
+      }
+    }
+  }
+}

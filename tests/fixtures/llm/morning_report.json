@@ -1,0 +1,59 @@
+{
+  "regime_status": "range_bound",
+  "regime_duration_days": 4,
+  "regime_narrative": "Range-bound consolidation. BTC holding $66,300-$69,400 on declining volume for four days. No catalyst in sight — the market is waiting.",
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "narrative": "Holding the range. $67,800 with volume drying up. Nothing to do here until range resolves."
+    },
+    {
+      "symbol": "ETHUSDT",
+      "narrative": "ETH is the one to watch. Funding creeping up (+0.067%) while price drifts toward $1,880 where there's a $22M long liquidation cluster. If that level breaks, forced selling accelerates the move."
+    },
+    {
+      "symbol": "SOLUSDT",
+      "narrative": "Relative strength continues — up 4.8% in 24h while everything else chops. Approaching $144 resistance, held for a week. Clean break on volume would be notable."
+    },
+    {
+      "symbol": "XRPUSDT",
+      "narrative": "Drifting within yesterday's range on low volume. No setup."
+    },
+    {
+      "symbol": "DOGEUSDT",
+      "narrative": "Unremarkable. Drifting with alts."
+    }
+  ],
+  "setups": [
+    {
+      "asset": "ETHUSDT",
+      "direction": "short",
+      "trigger_condition": "price_below",
+      "trigger_level": 1880.0,
+      "trigger_field": null,
+      "target_level": 1820.0,
+      "invalidation_level": 1950.0,
+      "confidence": 0.72,
+      "timeframe": "intraday",
+      "narrative": "Funding creep + liquidation cluster at $1,880. If that level breaks, forced selling accelerates to $1,820. Invalid above $1,950."
+    },
+    {
+      "asset": "SOLUSDT",
+      "direction": "long",
+      "trigger_condition": "price_above",
+      "trigger_level": 144.0,
+      "trigger_field": null,
+      "target_level": 152.0,
+      "invalidation_level": 138.0,
+      "confidence": 0.55,
+      "timeframe": "swing",
+      "narrative": "Relative strength for a week. Clean hourly close above $144 with volume targets $152. Invalid below $138."
+    }
+  ],
+  "market_narrative": "Day 4 of consolidation. ETH is tightening toward a liquidation cluster while SOL shows relative strength. Rest of the market is unremarkable — alts drifting in lockstep, nothing to differentiate. Two setups worth watching today.",
+  "significance": {
+    "magnitude": 0.4,
+    "surprise": 0.3,
+    "regime_relevance": 0.2
+  }
+}

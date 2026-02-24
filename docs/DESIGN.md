@@ -190,6 +190,71 @@ Because the system's outputs are structured records in storage, recapping and sc
 - Weekly briefing queries all setups/predictions for the week + outcomes → LLM synthesizes performance review with historical context
 - The free channel's credibility comes from this loop being mechanical, not editorial
 
+#### Structured Evening Scorecard
+
+The evening report produces a structured `scorecard` array — not just narrative. Each setup from the day is explicitly scored:
+
+```
+scorecard: [{
+  asset: "ETHUSDT",
+  direction: "short",
+  trigger_level: 1880.0,
+  outcome: "triggered",       // triggered, invalidated, expired, active
+  outcome_price: 1838.0,      // price at resolution (null if still active)
+  assessment: "hit",           // hit, miss, neutral, pending
+  miss_reason: null,           // null for hits. For misses: "wrong_direction",
+                               //   "wrong_level", "wrong_timing", "external_shock"
+  narrative: "Broke $1,880 mid-morning, cascade played out to $1,838..."
+}]
+```
+
+This structured scoring feeds the weekly directly — the weekly receives pre-scored data from each evening, not raw setup records. Scoring happens once, honestly, while the day is fresh. The weekly aggregates and synthesizes.
+
+**Failure taxonomy** on misses gives actionable feedback over time: "5 of your last 8 misses were wrong_level — triggers consistently 1-2% too tight" is more useful than raw hit/miss counts.
+
+#### Confidence Calibration
+
+Each setup includes a `confidence` field (0.0–1.0). Performance tracking breaks down by confidence level: "high-confidence calls hit 82%, moderate hit 55%." This is fed back as context so the model can recalibrate what its confidence ratings actually mean.
+
+#### Persistent Analyst Notebook
+
+A living document that gives the model self-knowledge across its stateless calls. Updated weekly as part of the weekly report generation. Stored as a `system_output` with `report_type: "notebook"`.
+
+```
+## Current Beliefs
+- BTC range-bound, day 12. Holding $66.3K–$69.4K.
+- ETH showing relative weakness vs BTC across all timeframes.
+- SOL relative strength for 3 weeks, diverging from alt pack.
+
+## Self-Identified Biases
+- Calling ETH breakdowns too early on funding signals alone.
+  Funding + declining OI has not been a reliable combo (2/7).
+- Breakout trigger levels consistently 1-2% too tight.
+  4 of last 6 breakout misses came within 1% of trigger before reversing.
+
+## Active Hypotheses
+- "Range resolves upward if BTC closes above $70K with rising OI"
+  (stated week 3, still active)
+- "ETH underperformance is institutional rotation, not weakness"
+  (stated week 2, evidence mixed)
+```
+
+**Size management:** The notebook is rewritten weekly, not appended. The model receives the current notebook + the week's data and produces a fresh notebook. Structural limits keep it bounded: max 8 beliefs, 5 biases, 6 hypotheses. If the model wants to add something new, it decides what to prune. Entries that are resolved, stale, or fully integrated into the analytical framework get dropped.
+
+**Context inclusion:** Every report call receives the notebook as part of Layer 3 context (~400-500 tokens). Small cost, high value — gives the model continuity and self-awareness.
+
+#### Performance Summary
+
+Rolling performance stats computed from `active_setups` and evening scorecards, included in every report's context:
+- Hit rate (7d, 30d, all-time)
+- Per-asset accuracy
+- Per-direction accuracy
+- Confidence calibration breakdown
+- Recent misses with failure taxonomy
+- Streak data (current win/loss streak)
+
+The model naturally recalibrates by seeing its own track record. No explicit "learning" mechanism — just rich performance data fed back as context.
+
 ### Setup Tracking — Live Alerting Without Per-Candle LLM Calls
 
 The LLM is only called for the three daily reports, alert generation (when triggered), and the weekly briefing. It is never called on a per-candle basis.
@@ -213,6 +278,15 @@ Reports are generated with a time buffer before their scheduled delivery time. I
 ### Model Selection
 
 Claude Opus for all report types and alerts. The call volume is sparse (3 daily + weekly + occasional alerts) and the product's value comes from synthesis quality and deep context utilization. No reason to compromise on model capability.
+
+### LLM Client Abstraction
+
+The Rust LLM client is abstract — a trait with implementations for multiple backends:
+- **Anthropic direct** — Messages API
+- **Vertex AI** — Google Cloud, Claude models
+- **OpenRouter** — multi-provider routing
+
+Config selects the active backend. All three support Claude and structured output (tool use), just different API shapes and auth. This gives flexibility in provider selection, cost optimization, and failover without touching prompt or schema code.
 
 ### Cost Model
 
@@ -371,14 +445,15 @@ The free channel never has its own content generation logic. It's always a trans
 
 Each premium event type has a configurable free channel behavior:
 
-**Always route (condensed):**
-- Evening recap → condensed version (produced in the same LLM call via `free_narrative` fields). Highlights, setup outcomes, enough to demonstrate accountability. Not enough to trade on.
+**Always route (full report):**
+- Evening recap → the full premium evening report goes to the free channel every day. No condensation, no separate free version. This is the free channel's daily anchor — genuinely useful, demonstrates the accountability loop publicly.
 
-**Always route (pass through):**
+**Always route (section extract):**
 - Weekly scorecard section → pulled from Sunday editorial. Hit rate, honest accounting. The trust builder.
 
 **Threshold-gated (configurable):**
 - Morning reports and alerts carry significance ratings from the LLM's structured output: `magnitude` (0.0–1.0), `surprise` (0.0–1.0), `regime_relevance` (0.0–1.0). The LLM assigns these as part of its normal analytical assessment — it doesn't know they're used for routing.
+- When a morning report or alert passes the threshold, the **full premium report** goes to the free channel. No condensed version, no summaries.
 - The Rust routing layer evaluates these ratings against configurable threshold rules. Example config:
 
 ```toml
@@ -397,8 +472,9 @@ rules = [
 ```
 
 - We control the free channel character entirely through config. Tunable toward "only big moves" or "anything surprising" or "only regime shifts" — no prompt changes, no extra LLM calls.
+- No `free_narrative` or `free_summary` fields needed in any schema. The free channel always receives the full premium content when routed.
 
-**Upsell placement:** Contextual, attached to condensed content that references premium content the free user didn't see. "Full morning briefings and real-time alerts in the premium channel" with invite link.
+**Upsell placement:** Contextual, attached to free channel messages. "Full morning briefings and real-time alerts in the premium channel" with invite link.
 
 ### Extensibility
 
@@ -777,10 +853,12 @@ active_setups (
   source_output_id   INTEGER NOT NULL REFERENCES system_outputs(id),
   asset              TEXT NOT NULL,
   direction          TEXT NOT NULL,     -- 'long', 'short', 'neutral'
-  trigger_condition  TEXT NOT NULL,
+  trigger_condition  TEXT NOT NULL,     -- 'price_above', 'price_below', 'indicator_above', 'indicator_below'
   trigger_level      REAL NOT NULL,
+  trigger_field      TEXT,              -- indicator name for indicator triggers (e.g. 'rsi_14_1h'), null for price triggers
   target_level       REAL,
   invalidation_level REAL,
+  confidence         REAL,             -- 0.0-1.0, LLM's confidence in this setup
   status             TEXT NOT NULL DEFAULT 'active',  -- 'active', 'triggered', 'invalidated', 'expired', 'superseded'
   created_at         INTEGER NOT NULL,
   resolved_at        INTEGER,
@@ -916,10 +994,9 @@ Two categories, both evaluated by Rust every 5 minutes against Python's computed
 **LLM setup triggers** — extracted from structured output, stored in `active_setups`. Condition types:
 
 - `price_above`, `price_below` — price level checks
-- `price_percent_move` — percentage move from setup creation price within a time window
-- `indicator_above`, `indicator_below` — e.g., `trigger_condition: "indicator_below", trigger_field: "rsi_14_1h", trigger_level: 30.0`
+- `indicator_above`, `indicator_below` — indicator threshold checks. Uses `trigger_field` (nullable column on `active_setups`) to specify which indicator, e.g., `trigger_condition: "indicator_below", trigger_field: "rsi_14_1h", trigger_level: 30.0`
 
-Starting with price-level triggers. Indicator-based triggers added when the schema supports it and the LLM starts producing them naturally.
+All four condition types designed into the schema from day one. Price triggers implemented first in the live eval loop. Indicator triggers added when the eval loop is wired up — the infrastructure (indicator computation every 5m) already exists.
 
 **System-level rules** — hardcoded Rust functions, configured via TOML:
 

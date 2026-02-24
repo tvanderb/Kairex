@@ -12,6 +12,7 @@ pub use models::{
     ActiveSetup, Candle, FiredAlert, FundingRate, IndexValue, OpenInterest, SystemOutput,
 };
 pub use retention::RetentionConfig;
+pub use system_output::extract_setups;
 
 // -- Market data convenience methods --
 

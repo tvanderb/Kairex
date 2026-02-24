@@ -1,0 +1,49 @@
+{
+  "morning_reference_narrative": "Morning's ETH call is in play. Price tested $1,890 twice in the past two hours on rising volume. Hasn't broken $1,880 yet but bids are thinning. SOL faded — rejected at $143.50 on weak volume.",
+  "assets": [
+    {
+      "symbol": "BTCUSDT",
+      "narrative": "BTC doing nothing. $67,800, range intact."
+    },
+    {
+      "symbol": "ETHUSDT",
+      "narrative": "Tested $1,890 twice, volume rising. Funding ticked up to +0.072%. Bids thinning at $1,880. Setup still valid and looking more likely."
+    },
+    {
+      "symbol": "SOLUSDT",
+      "narrative": "Faded. Rejected at $143.50 on weak volume, back to $141. Setup still valid but momentum isn't there."
+    }
+  ],
+  "setups": [
+    {
+      "asset": "ETHUSDT",
+      "direction": "short",
+      "trigger_condition": "price_below",
+      "trigger_level": 1880.0,
+      "trigger_field": null,
+      "target_level": 1820.0,
+      "invalidation_level": 1950.0,
+      "confidence": 0.78,
+      "timeframe": "intraday",
+      "narrative": "Conviction higher after two tests. Funding still rising. Same levels, higher probability."
+    },
+    {
+      "asset": "SOLUSDT",
+      "direction": "long",
+      "trigger_condition": "price_above",
+      "trigger_level": 144.0,
+      "trigger_field": null,
+      "target_level": 152.0,
+      "invalidation_level": 138.0,
+      "confidence": 0.4,
+      "timeframe": "swing",
+      "narrative": "Carrying forward but less conviction. Momentum faded after morning rejection."
+    }
+  ],
+  "market_narrative": "Morning read playing out. ETH tightening toward the level, SOL lost momentum. BTC range continues. No new setups. Same levels, updated conviction.",
+  "significance": {
+    "magnitude": 0.35,
+    "surprise": 0.2,
+    "regime_relevance": 0.15
+  }
+}

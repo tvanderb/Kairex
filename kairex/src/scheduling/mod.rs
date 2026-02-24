@@ -76,10 +76,7 @@ impl Scheduler {
     }
 
     /// Find the next event to fire, given the current time in ET.
-    fn next_event(
-        &self,
-        now: chrono::DateTime<chrono_tz::Tz>,
-    ) -> Option<PendingEvent> {
+    fn next_event(&self, now: chrono::DateTime<chrono_tz::Tz>) -> Option<PendingEvent> {
         let mut candidates = Vec::new();
 
         let today = now.date_naive();
@@ -160,10 +157,7 @@ impl Scheduler {
         })
     }
 
-    fn make_weekly_event(
-        &self,
-        now: chrono::DateTime<chrono_tz::Tz>,
-    ) -> Option<PendingEvent> {
+    fn make_weekly_event(&self, now: chrono::DateTime<chrono_tz::Tz>) -> Option<PendingEvent> {
         let weekly = &self.config.weekly;
         let target_weekday = parse_weekday(&weekly.day)?;
         let time = parse_time(&weekly.delivery_time)?;
