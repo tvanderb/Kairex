@@ -1,0 +1,14 @@
+# Analysis layer configuration — indicator computation and LLM context assembly.
+
+[indicators]
+# Number of indicator periods included in LLM context per symbol/timeframe.
+# Python computes 20 periods; this trims to fit context budget.
+# 17 periods × 9 assets × 3 timeframes ≈ 460 snapshots — well within 1M token context.
+context_periods = 17
+
+# Python subprocess timeout in seconds.
+compute_timeout_seconds = 30
+context_timeout_seconds = 60
+
+# Path to Python virtual environment (relative to project root).
+python_venv = ".venv"

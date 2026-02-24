@@ -1,13 +1,21 @@
-[compute_indicators]
-description = "Compute technical indicators for live evaluation"
+# Python script manifest — declares data requirements for each script.
+# Rust reads this to know what data to query from storage before calling each script.
 
+[compute_indicators]
+description = "Compute technical indicators for all assets and timeframes"
+timeout_seconds = 30
+output_periods = 20          # Number of indicator periods returned per symbol/timeframe
+
+# Data requirements: how many candles to feed per timeframe.
+# 260 covers the longest lookback (SMA-200 + Ichimoku 52-period projection + buffer).
 [compute_indicators.data]
-candles_5m = { periods = 100 }
-candles_1h = { periods = 50 }
-candles_1d = { periods = 30 }
+candles_5m = { periods = 260 }
+candles_1h = { periods = 260 }
+candles_1d = { periods = 260 }
 
 [build_context]
 description = "Build pre-computed numerical context for LLM reports"
+timeout_seconds = 60
 
 [build_context.data]
 candles_5m = { periods = 288 }      # 24h

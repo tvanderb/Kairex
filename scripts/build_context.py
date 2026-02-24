@@ -2,24 +2,51 @@
 
 Contract:
   - Receives JSON on stdin: full market data per manifest.toml requirements
-  - Returns JSON on stdout: rich per-asset context blocks + cross-market data
+  - Returns JSON on stdout: per-asset context + cross-market context
   - Timeout: 60s (enforced by Rust caller)
 
 Input shape:
   {
     "assets": ["BTCUSDT", ...],
-    "candles_5m": { ... },
-    "candles_1h": { ... },
-    "candles_1d": { ... },
-    "funding_rates": { ... },
-    "open_interest": { ... },
-    "indices": { ... }
+    "candles": {
+      "BTCUSDT": {
+        "5m": [{"ts": ..., "o": ..., "h": ..., "l": ..., "c": ..., "v": ...}, ...],
+        "1h": [...],
+        "1d": [...]
+      }
+    },
+    "funding_rates": {
+      "BTCUSDT": [{"ts": ..., "rate": ...}, ...]
+    },
+    "open_interest": {
+      "BTCUSDT": [{"ts": ..., "value": ...}, ...]
+    },
+    "indices": {
+      "fear_greed": [{"ts": ..., "value": ...}, ...],
+      "btc_dominance": [...],
+      "eth_dominance": [...],
+      "total_market_cap": [...]
+    }
   }
 
 Output shape:
-  Per-asset context blocks with narrative-ready numerical context,
-  plus cross-market data. Feeds directly into LLM prompt as
-  Layer 3 per-call context.
+  {
+    "assets": {
+      "BTCUSDT": {
+        "price": { "current": ..., "change_24h_pct": ..., ... },
+        "volume": { ... },
+        "funding": { ... },
+        "open_interest": { ... },
+        "levels": { ... }
+      }
+    },
+    "market": {
+      "fear_greed": { ... },
+      "btc_dominance": { ... },
+      "eth_dominance": { ... },
+      "total_market_cap": { ... }
+    }
+  }
 """
 
 import json

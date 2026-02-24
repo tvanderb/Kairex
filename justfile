@@ -8,14 +8,19 @@ build:
 release:
     cargo build --release
 
-# Run all tests
+# Run all tests (Rust + Python)
 test:
     cargo test
+    LD_LIBRARY_PATH=/usr/lib .venv/bin/python3 -m pytest scripts/tests/ -v
 
 # Run clippy and fmt check
 lint:
     cargo fmt --all --check
     cargo clippy --all-targets -- -D warnings
+
+# Run Python tests only
+pytest:
+    LD_LIBRARY_PATH=/usr/lib .venv/bin/python3 -m pytest scripts/tests/ -v
 
 # Format code
 fmt:
