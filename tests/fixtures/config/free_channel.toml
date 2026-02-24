@@ -1,0 +1,41 @@
+# Free channel routing rules.
+# Single pipeline: premium content -> selective routing to free channel.
+# Significance fields from LLM structured output: magnitude, surprise, regime_relevance (all 0.0-1.0).
+
+[evening_recap]
+# Always route a condensed version (free_narrative fields from same LLM call).
+route = "always"
+format = "condensed"
+
+[weekly_scorecard]
+# Always route the scorecard section from the Sunday editorial.
+route = "always"
+format = "pass_through"
+
+[morning_report]
+# Route to free if any rule matches.
+route = "threshold"
+
+[[morning_report.rules]]
+field = "magnitude"
+op = ">"
+value = 0.7
+
+[[morning_report.rules]]
+fields = ["surprise", "regime_relevance"]
+op = "all_above"
+value = 0.5
+
+[alerts]
+# Route to free if any rule matches.
+route = "threshold"
+
+[[alerts.rules]]
+field = "magnitude"
+op = ">"
+value = 0.8
+
+[[alerts.rules]]
+fields = ["magnitude", "surprise"]
+op = "all_above"
+value = 0.6

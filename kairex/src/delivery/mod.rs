@@ -1,1 +1,242 @@
+mod error;
+pub mod format;
+mod routing;
+mod telegram;
 
+pub use error::{DeliveryError, Result};
+pub use routing::{FreeChannelRouter, RouteDecision};
+pub use telegram::TelegramClient;
+
+use tracing::{error, info};
+
+use crate::config::{DeliveryConfig, FormatMode, FreeChannelConfig, SetupFormat};
+use crate::llm::schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
+use crate::llm::types::Significance;
+use crate::llm::ReportType;
+use crate::storage::Database;
+
+/// Wraps all 5 report types for unified delivery handling.
+pub enum Report {
+    Morning(MorningReport),
+    Midday(MiddayReport),
+    Evening(EveningReport),
+    Alert(AlertReport),
+    Weekly(WeeklyReport),
+}
+
+impl Report {
+    pub fn significance(&self) -> &Significance {
+        match self {
+            Self::Morning(r) => &r.significance,
+            Self::Midday(r) => &r.significance,
+            Self::Evening(r) => &r.significance,
+            Self::Alert(r) => &r.significance,
+            Self::Weekly(r) => &r.significance,
+        }
+    }
+
+    pub fn report_type(&self) -> ReportType {
+        match self {
+            Self::Morning(_) => ReportType::Morning,
+            Self::Midday(_) => ReportType::Midday,
+            Self::Evening(_) => ReportType::Evening,
+            Self::Alert(_) => ReportType::Alert,
+            Self::Weekly(_) => ReportType::Weekly,
+        }
+    }
+}
+
+pub struct DeliveryLayer {
+    telegram: TelegramClient,
+    router: FreeChannelRouter,
+    setup_format: SetupFormat,
+    db: Database,
+}
+
+impl DeliveryLayer {
+    pub fn new(
+        delivery_config: &DeliveryConfig,
+        free_channel_config: FreeChannelConfig,
+        db: Database,
+    ) -> Result<Self> {
+        let telegram = TelegramClient::from_env()?;
+        let router = FreeChannelRouter::new(free_channel_config);
+
+        Ok(Self {
+            telegram,
+            router,
+            setup_format: delivery_config.setup_format,
+            db,
+        })
+    }
+
+    /// Deliver a report to premium channel, optionally to free channel, and update DB.
+    pub async fn deliver(&self, report: &Report, output_id: i64) -> Result<()> {
+        let sf = self.setup_format;
+        let report_type = report.report_type();
+        let now_ms = now_millis();
+
+        // Format for premium
+        let premium_html = format_for_premium(report, sf);
+
+        // Send to premium
+        if let Err(e) = self.telegram.send_premium(&premium_html).await {
+            error!(?report_type, "failed to send to premium channel: {e}");
+            self.update_status(output_id, "failed", now_ms);
+            self.best_effort_notify(&format!(
+                "Failed to deliver {} to premium: {e}",
+                report_type.tool_name()
+            ))
+            .await;
+            return Err(e);
+        }
+
+        info!(?report_type, "delivered to premium channel");
+
+        // Evaluate free channel routing
+        let decision = self.router.evaluate(report_type, report.significance());
+
+        match decision {
+            RouteDecision::Send(FormatMode::PassThrough) => {
+                if let Err(e) = self.telegram.send_free(&premium_html).await {
+                    error!(?report_type, "failed to send to free channel: {e}");
+                    self.best_effort_notify(&format!(
+                        "Failed to deliver {} to free: {e}",
+                        report_type.tool_name()
+                    ))
+                    .await;
+                    // Premium succeeded, so mark as delivered but log the free failure
+                }
+            }
+            RouteDecision::Send(FormatMode::Condensed) => {
+                let condensed_html = format_for_free(report, sf);
+                if let Err(e) = self.telegram.send_free(&condensed_html).await {
+                    error!(
+                        ?report_type,
+                        "failed to send condensed to free channel: {e}"
+                    );
+                    self.best_effort_notify(&format!(
+                        "Failed to deliver condensed {} to free: {e}",
+                        report_type.tool_name()
+                    ))
+                    .await;
+                }
+            }
+            RouteDecision::Skip => {}
+        }
+
+        self.update_status(output_id, "delivered", now_ms);
+        Ok(())
+    }
+
+    /// Send an operator notification (system status, error messages).
+    pub async fn notify_operator(&self, message: &str) -> Result<()> {
+        self.telegram.send_operator(message).await
+    }
+
+    fn update_status(&self, output_id: i64, status: &str, delivered_at: i64) {
+        if let Err(e) = self
+            .db
+            .update_delivery_status(output_id, status, delivered_at)
+        {
+            error!(output_id, "failed to update delivery status: {e}");
+        }
+    }
+
+    async fn best_effort_notify(&self, message: &str) {
+        if let Err(e) = self.telegram.send_operator(message).await {
+            error!("failed to notify operator: {e}");
+        }
+    }
+}
+
+fn format_for_premium(report: &Report, sf: SetupFormat) -> String {
+    match report {
+        Report::Morning(r) => format::format_morning(r, sf),
+        Report::Midday(r) => format::format_midday(r, sf),
+        Report::Evening(r) => format::format_evening(r, sf),
+        Report::Alert(r) => format::format_alert(r, sf),
+        Report::Weekly(r) => format::format_weekly(r, sf),
+    }
+}
+
+fn format_for_free(report: &Report, sf: SetupFormat) -> String {
+    match report {
+        Report::Morning(r) => format::format_morning_condensed(r, sf),
+        Report::Evening(r) => format::format_evening_condensed(r, sf),
+        Report::Alert(r) => format::format_alert_condensed(r, sf),
+        // Weekly uses pass_through (handled by caller), these shouldn't be called
+        // but produce full format as fallback
+        Report::Weekly(r) => format::format_weekly(r, sf),
+        Report::Midday(r) => format::format_midday(r, sf),
+    }
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn load_fixture<T: serde::de::DeserializeOwned>(name: &str) -> T {
+        let path = format!(
+            "{}/tests/fixtures/llm/{name}",
+            env!("CARGO_MANIFEST_DIR").trim_end_matches("/kairex")
+        );
+        let json =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read {path}: {e}"));
+        serde_json::from_str(&json).unwrap_or_else(|e| panic!("failed to parse {path}: {e}"))
+    }
+
+    #[test]
+    fn report_enum_significance_accessor() {
+        let morning: MorningReport = load_fixture("morning_report.json");
+        let sig = morning.significance.clone();
+        let report = Report::Morning(morning);
+        assert_eq!(report.significance(), &sig);
+        assert_eq!(report.report_type(), ReportType::Morning);
+    }
+
+    #[test]
+    fn report_enum_all_variants() {
+        let morning: MorningReport = load_fixture("morning_report.json");
+        assert_eq!(Report::Morning(morning).report_type(), ReportType::Morning);
+
+        let midday: MiddayReport = load_fixture("midday_report.json");
+        assert_eq!(Report::Midday(midday).report_type(), ReportType::Midday);
+
+        let evening: EveningReport = load_fixture("evening_report.json");
+        assert_eq!(Report::Evening(evening).report_type(), ReportType::Evening);
+
+        let alert: AlertReport = load_fixture("alert_report.json");
+        assert_eq!(Report::Alert(alert).report_type(), ReportType::Alert);
+
+        let weekly: WeeklyReport = load_fixture("weekly_report.json");
+        assert_eq!(Report::Weekly(weekly).report_type(), ReportType::Weekly);
+    }
+
+    #[test]
+    fn format_premium_dispatches_all_types() {
+        let sf = SetupFormat::DetailLine;
+
+        let morning: MorningReport = load_fixture("morning_report.json");
+        assert!(!format_for_premium(&Report::Morning(morning), sf).is_empty());
+
+        let midday: MiddayReport = load_fixture("midday_report.json");
+        assert!(!format_for_premium(&Report::Midday(midday), sf).is_empty());
+
+        let evening: EveningReport = load_fixture("evening_report.json");
+        assert!(!format_for_premium(&Report::Evening(evening), sf).is_empty());
+
+        let alert: AlertReport = load_fixture("alert_report.json");
+        assert!(!format_for_premium(&Report::Alert(alert), sf).is_empty());
+
+        let weekly: WeeklyReport = load_fixture("weekly_report.json");
+        assert!(!format_for_premium(&Report::Weekly(weekly), sf).is_empty());
+    }
+}
