@@ -1,0 +1,55 @@
+// Alloy configuration — Docker log discovery and shipping to Loki
+//
+// Data flow: Container stdout → Docker JSON log driver → Alloy (docker.sock) → Loki
+
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "docker" {
+	targets = discovery.docker.containers.targets
+
+	// Extract container name as a label
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+
+	// Extract compose service name
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+}
+
+loki.source.docker "containers" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.relabel.docker.output
+	forward_to = [loki.process.docker.receiver]
+}
+
+// Parse JSON log lines from the kairex container to extract level and structured fields
+loki.process "docker" {
+	// Extract log level from JSON structured logs
+	stage.json {
+		expressions = {
+			level   = "level",
+			message = "message",
+		}
+	}
+
+	stage.labels {
+		values = {
+			level = "",
+		}
+	}
+
+	forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

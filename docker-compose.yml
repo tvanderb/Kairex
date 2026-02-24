@@ -21,22 +21,34 @@ services:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
 
   tempo:
     image: grafana/tempo:latest
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
-      - tempo-data:/tmp/tempo
+      - ./observability/tempo/tempo.yaml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
     ports:
       - "4317:4317"   # OTLP gRPC
     restart: unless-stopped
 
   prometheus:
     image: prom/prometheus:latest
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
     volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
       - "9091:9090"
@@ -44,17 +56,23 @@ services:
 
   loki:
     image: grafana/loki:latest
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
     ports:
       - "3100:3100"
-    volumes:
-      - loki-data:/loki
     restart: unless-stopped
 
   alloy:
     image: grafana/alloy:latest
+    command: ["run", "/etc/alloy/config.alloy"]
     volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
+    depends_on:
+      - loki
 
 volumes:
   grafana-data:
