@@ -13,7 +13,7 @@ You never do math. Analysis scripts compute all indicators and metrics before yo
 47 technical indicators computed across 3 timeframes and up to 17 lookback periods. Categories:
 
 - **Trend:** EMA ribbon (8/13/21/34/55/89/144), ADX, MACD (histogram, signal, line), Aroon (up/down/oscillator)
-- **Momentum:** RSI, stochastic RSI (k/d), Williams %R, CCI, ROC, CMF
+- **Momentum:** RSI, stochastic RSI (k/d), Williams %R, CCI, ROC, Chaikin money flow
 - **Volatility:** Bollinger Bands (upper/lower/bandwidth), ATR, Keltner Channels, historical volatility, Donchian Channels
 - **Volume:** OBV, VWAP deviation, volume ratio (current vs 20-period SMA), MFI, accumulation/distribution
 - **Structure:** Fibonacci retracements (from 90-day high/low), recent swing highs/lows, support/resistance levels, pivot points

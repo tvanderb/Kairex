@@ -175,31 +175,31 @@ class TestTrendIndicators:
         periods = run_indicators(make_candles(260))
         p = last_period(periods)
         expected = p["macd_line"] - p["macd_signal"]
-        assert abs(p["macd_hist"] - expected) < 0.001
+        assert abs(p["macd_histogram"] - expected) < 0.001
 
     def test_adx_is_positive(self):
         periods = run_indicators(make_candles(260))
         p = last_period(periods)
         assert p["adx"] > 0
-        assert p["di_plus"] >= 0
-        assert p["di_minus"] >= 0
+        assert p["adx_di_plus"] >= 0
+        assert p["adx_di_minus"] >= 0
 
     def test_ichimoku_tenkan_shorter_than_kijun(self):
         """Tenkan-sen (9-period) should be more responsive than kijun-sen (26-period)."""
         periods = run_indicators(make_candles(260))
         # Both should be present
         p = last_period(periods)
-        assert p["ichi_tenkan"] is not None
-        assert p["ichi_kijun"] is not None
+        assert p["ichimoku_tenkan"] is not None
+        assert p["ichimoku_kijun"] is not None
 
     def test_ichimoku_chikou_ref_is_lagged_close(self):
-        """ichi_chikou_ref should be the close from 26 periods ago."""
+        """ichimoku_chikou_ref should be the close from 26 periods ago."""
         candles = make_candles(260)
         df = _candles_to_dataframe(candles)
         expected = df["close"].iloc[-27]  # 26 periods before the last
 
         periods = run_indicators(candles)
-        actual = last_period(periods)["ichi_chikou_ref"]
+        actual = last_period(periods)["ichimoku_chikou_ref"]
         assert abs(actual - expected) < 0.01
 
 
@@ -230,10 +230,10 @@ class TestMomentumIndicators:
     def test_stoch_rsi_bounded_0_1(self):
         periods = run_indicators(make_candles(260))
         for p in periods:
-            if p["stoch_rsi_k"] is not None:
-                assert -0.001 <= p["stoch_rsi_k"] <= 1.001
-            if p["stoch_rsi_d"] is not None:
-                assert -0.001 <= p["stoch_rsi_d"] <= 1.001
+            if p["stochastic_rsi_k"] is not None:
+                assert -0.001 <= p["stochastic_rsi_k"] <= 1.001
+            if p["stochastic_rsi_d"] is not None:
+                assert -0.001 <= p["stochastic_rsi_d"] <= 1.001
 
     def test_williams_r_bounded(self):
         periods = run_indicators(make_candles(260))
@@ -275,20 +275,20 @@ class TestVolatilityIndicators:
         """Upper > middle > lower always."""
         periods = run_indicators(make_candles(260))
         for p in periods:
-            if all(p[k] is not None for k in ("bb_upper", "bb_mid", "bb_lower")):
-                assert p["bb_upper"] > p["bb_mid"] > p["bb_lower"]
+            if all(p[k] is not None for k in ("bollinger_upper", "bollinger_mid", "bollinger_lower")):
+                assert p["bollinger_upper"] > p["bollinger_mid"] > p["bollinger_lower"]
 
     def test_bollinger_mid_equals_sma_20(self):
         """BB middle band should equal SMA-20."""
         periods = run_indicators(make_candles(260))
         p = last_period(periods)
-        assert abs(p["bb_mid"] - p["sma_20"]) < 0.01
+        assert abs(p["bollinger_mid"] - p["sma_20"]) < 0.01
 
     def test_bb_width_positive(self):
         periods = run_indicators(make_candles(260))
         for p in periods:
-            if p["bb_width"] is not None:
-                assert p["bb_width"] > 0
+            if p["bollinger_bandwidth"] is not None:
+                assert p["bollinger_bandwidth"] > 0
 
     def test_atr_positive(self):
         periods = run_indicators(make_candles(260))
@@ -299,14 +299,14 @@ class TestVolatilityIndicators:
     def test_keltner_channel_ordering(self):
         periods = run_indicators(make_candles(260))
         for p in periods:
-            if all(p[k] is not None for k in ("kc_upper", "kc_mid", "kc_lower")):
-                assert p["kc_upper"] > p["kc_mid"] > p["kc_lower"]
+            if all(p[k] is not None for k in ("keltner_upper", "keltner_mid", "keltner_lower")):
+                assert p["keltner_upper"] > p["keltner_mid"] > p["keltner_lower"]
 
     def test_hist_vol_positive(self):
         periods = run_indicators(make_candles(260))
         for p in periods:
-            if p["hist_vol_20"] is not None:
-                assert p["hist_vol_20"] > 0
+            if p["historical_volatility_20"] is not None:
+                assert p["historical_volatility_20"] > 0
 
     def test_flat_market_low_volatility(self):
         """Flat prices should produce low ATR and BB width."""
@@ -315,7 +315,7 @@ class TestVolatilityIndicators:
         # ATR should be small relative to price (h-l is only 2.0)
         assert p["atr_14"] < 5.0
         # BB width should be very small
-        assert p["bb_width"] < 1.0
+        assert p["bollinger_bandwidth"] < 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -334,20 +334,20 @@ class TestVolumeIndicators:
         """Volume ratio should be near 1.0 when volume is near its SMA."""
         periods = run_indicators(make_flat_candles(260))
         p = last_period(periods)
-        assert 0.9 < p["vol_ratio"] < 1.1
+        assert 0.9 < p["volume_ratio"] < 1.1
 
     def test_cmf_bounded(self):
         """CMF should be between -1 and 1."""
         periods = run_indicators(make_candles(260))
         for p in periods:
-            if p["cmf_20"] is not None:
-                assert -1.01 <= p["cmf_20"] <= 1.01
+            if p["chaikin_money_flow_20"] is not None:
+                assert -1.01 <= p["chaikin_money_flow_20"] <= 1.01
 
     def test_ad_is_cumulative(self):
         """A/D line should be a running total."""
         periods = run_indicators(make_candles(260))
         # A/D values should vary (not all zero)
-        ad_vals = [p["ad"] for p in periods if p["ad"] is not None]
+        ad_vals = [p["accumulation_distribution"] for p in periods if p["accumulation_distribution"] is not None]
         assert len(set(ad_vals)) > 1
 
 
