@@ -53,8 +53,7 @@ def compute_all_indicators(data: dict) -> dict:
                 continue
 
             df = _candles_to_dataframe(candle_list)
-            is_intraday = timeframe in ("5m", "1h")
-            periods = _compute_for_timeframe(df, is_intraday)
+            periods = _compute_for_timeframe(df, timeframe)
             result[asset][timeframe] = {"periods": periods}
 
     return result
@@ -68,8 +67,9 @@ def _candles_to_dataframe(candle_list: list[dict]) -> pd.DataFrame:
     return df
 
 
-def _compute_for_timeframe(df: pd.DataFrame, is_intraday: bool) -> list[dict]:
+def _compute_for_timeframe(df: pd.DataFrame, timeframe: str) -> list[dict]:
     """Compute all indicators and return the last OUTPUT_PERIODS as snapshots."""
+    is_intraday = timeframe in ("5m", "1h")
     n = len(df)
     high = df["high"]
     low = df["low"]
@@ -146,7 +146,8 @@ def _compute_for_timeframe(df: pd.DataFrame, is_intraday: bool) -> list[dict]:
     # Historical volatility: 20-period annualized std dev of log returns
     if n >= 21:
         log_returns = np.log(close / close.shift(1))
-        indicators["historical_volatility_20"] = log_returns.rolling(window=20).std() * np.sqrt(365)
+        periods_per_year = {"5m": 105120, "1h": 8760, "1d": 365}[timeframe]
+        indicators["historical_volatility_20"] = log_returns.rolling(window=20).std() * np.sqrt(periods_per_year)
 
     # --- Volume ---
     if n >= 2:

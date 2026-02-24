@@ -64,10 +64,10 @@ def make_flat_candles(n=260, price=100.0, volume=1000.0, interval_ms=3600000):
     ]
 
 
-def run_indicators(candles, is_intraday=True):
+def run_indicators(candles, timeframe="1h"):
     """Helper: candles -> last OUTPUT_PERIODS of indicator snapshots."""
     df = _candles_to_dataframe(candles)
-    return _compute_for_timeframe(df, is_intraday)
+    return _compute_for_timeframe(df, timeframe)
 
 
 def last_period(periods):
@@ -112,11 +112,11 @@ class TestOutputShape:
                 assert v is None or isinstance(v, float), f"{k} = {v} ({type(v)})"
 
     def test_vwap_present_for_intraday(self):
-        periods = run_indicators(make_candles(260), is_intraday=True)
+        periods = run_indicators(make_candles(260), timeframe="1h")
         assert "vwap" in last_period(periods)
 
     def test_vwap_absent_for_daily(self):
-        periods = run_indicators(make_candles(260), is_intraday=False)
+        periods = run_indicators(make_candles(260), timeframe="1d")
         assert "vwap" not in last_period(periods)
 
     def test_full_pipeline_structure(self):
