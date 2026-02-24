@@ -1,0 +1,15 @@
+# LLM client configuration — Anthropic Messages API.
+# API key is read from ANTHROPIC_API_KEY env var, not stored here.
+
+model = "claude-opus-4-20250514"
+max_tokens = 8192
+temperature = 0.3
+timeout_seconds = 120
+
+# Path to prompts directory (relative to project root).
+prompts_dir = "prompts"
+
+[retry]
+max_retries = 3
+base_delay_ms = 1000
+max_delay_ms = 30000

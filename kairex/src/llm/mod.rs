@@ -1,6 +1,9 @@
+pub mod api_types;
+pub mod client;
 pub mod schemas;
 pub mod types;
 
+pub use client::{AnthropicClient, LlmResponse};
 pub use schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
 pub use types::*;
 
@@ -27,6 +30,55 @@ pub enum LlmError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Max retries ({attempts}) exhausted: {message}")]
+    RetriesExhausted { attempts: u32, message: String },
+}
+
+/// Report types matching scheduler event strings and schema files.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReportType {
+    Morning,
+    Midday,
+    Evening,
+    Alert,
+    Weekly,
+}
+
+impl ReportType {
+    /// Parse from scheduler's report_type string.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "morning" => Some(Self::Morning),
+            "midday" => Some(Self::Midday),
+            "evening" => Some(Self::Evening),
+            "alert" => Some(Self::Alert),
+            "weekly" => Some(Self::Weekly),
+            _ => None,
+        }
+    }
+
+    /// Tool name matching the schema file (e.g. "morning_report").
+    pub fn tool_name(&self) -> &'static str {
+        match self {
+            Self::Morning => "morning_report",
+            Self::Midday => "midday_report",
+            Self::Evening => "evening_report",
+            Self::Alert => "alert_report",
+            Self::Weekly => "weekly_report",
+        }
+    }
+
+    /// Schema file path relative to project root.
+    pub fn schema_path(&self) -> &'static str {
+        match self {
+            Self::Morning => "schemas/morning.json",
+            Self::Midday => "schemas/midday.json",
+            Self::Evening => "schemas/evening.json",
+            Self::Alert => "schemas/alert.json",
+            Self::Weekly => "schemas/weekly.json",
+        }
+    }
 }
 
 #[cfg(test)]

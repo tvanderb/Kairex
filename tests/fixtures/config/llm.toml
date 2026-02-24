@@ -1,0 +1,10 @@
+model = "claude-opus-4-20250514"
+max_tokens = 8192
+temperature = 0.3
+timeout_seconds = 120
+prompts_dir = "prompts"
+
+[retry]
+max_retries = 3
+base_delay_ms = 1000
+max_delay_ms = 30000
