@@ -1,0 +1,12 @@
+# Evaluation layer configuration — live trigger detection cycle.
+
+# How often the evaluation loop checks active setups (seconds).
+cycle_interval_seconds = 300
+
+[cooldown_minutes]
+# Cooldown after a setup trigger fires (minutes).
+# Prevents duplicate alerts for the same trigger condition.
+setup_trigger = 60
+
+# Cooldown after a setup invalidation fires (minutes).
+setup_invalidation = 60

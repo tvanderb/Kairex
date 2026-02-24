@@ -1,0 +1,7 @@
+# Evaluation layer configuration — test fixture.
+
+cycle_interval_seconds = 60
+
+[cooldown_minutes]
+setup_trigger = 30
+setup_invalidation = 30

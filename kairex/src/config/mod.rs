@@ -2,6 +2,7 @@ mod analysis;
 mod assets;
 mod collection;
 mod delivery;
+mod evaluation;
 mod llm;
 mod schedules;
 
@@ -11,6 +12,7 @@ pub use collection::{CollectionConfig, PollEndpoint, PollingConfig, RetryConfig,
 pub use delivery::{
     DeliveryConfig, FormatMode, FreeChannelConfig, RouteConfig, RouteMode, RouteRule, SetupFormat,
 };
+pub use evaluation::{CooldownConfig, EvaluationConfig};
 pub use llm::{LlmConfig, LlmRetryConfig};
 pub use schedules::{OvernightConfig, ReportSchedule, SchedulesConfig, WeeklySchedule};
 
