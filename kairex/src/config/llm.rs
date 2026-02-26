@@ -14,6 +14,8 @@ pub struct LlmConfig {
     pub timeout_seconds: u64,
     pub prompts_dir: String,
     pub retry: LlmRetryConfig,
+    #[serde(default)]
+    pub editor_max_tokens: Option<u32>,
 }
 
 fn default_provider() -> String {

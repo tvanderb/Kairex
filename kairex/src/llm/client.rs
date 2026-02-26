@@ -8,7 +8,7 @@ use crate::llm::api_types::{
     ApiErrorResponse, ContentBlock, Message, MessagesRequest, MessagesResponse, Tool, ToolChoice,
 };
 use crate::llm::schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
-use crate::llm::{LlmError, LlmProvider, Provider, ReportType};
+use crate::llm::{EditorOutput, LlmError, LlmProvider, Provider, ReportType};
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 
@@ -125,6 +125,92 @@ impl LlmProvider for LlmClient {
 
         Ok(LlmResponse {
             output,
+            input_tokens: response.usage.input_tokens,
+            output_tokens: response.usage.output_tokens,
+            model: response.model,
+        })
+    }
+
+    /// Edit a report: compress analyst JSON into Telegram-ready HTML.
+    #[instrument(name = "llm.edit", skip(self, report_json, project_root), fields(report_type = ?report_type))]
+    async fn edit(
+        &self,
+        report_type: ReportType,
+        report_json: &serde_json::Value,
+        produce_free: bool,
+        project_root: &Path,
+    ) -> Result<EditorOutput, LlmError> {
+        let prompts_dir = project_root.join(&self.config.prompts_dir);
+
+        // Read editor prompts from disk (hot-swappable)
+        let identity = std::fs::read_to_string(prompts_dir.join("editor_identity.md"))
+            .map_err(|e| LlmError::Config(format!("failed to read editor_identity.md: {e}")))?;
+        let system_prompt = std::fs::read_to_string(prompts_dir.join("editor_system.md"))
+            .map_err(|e| LlmError::Config(format!("failed to read editor_system.md: {e}")))?;
+
+        // Read editor schema from disk
+        let schema_path = prompts_dir.join("schemas/editor.json");
+        let schema_json = std::fs::read_to_string(&schema_path).map_err(|e| {
+            LlmError::Config(format!(
+                "failed to read schema {}: {e}",
+                schema_path.display()
+            ))
+        })?;
+        let schema: serde_json::Value = serde_json::from_str(&schema_json)?;
+
+        let tool = Tool {
+            name: schema["name"]
+                .as_str()
+                .unwrap_or("editor_output")
+                .to_string(),
+            description: schema["description"].as_str().unwrap_or("").to_string(),
+            input_schema: schema["input_schema"].clone(),
+        };
+
+        let full_system = format!("{identity}\n\n---\n\n{system_prompt}");
+
+        // User message: report type + produce_free flag + full analyst JSON
+        let user_content = serde_json::to_string_pretty(&serde_json::json!({
+            "report_type": report_type.as_str(),
+            "produce_free_version": produce_free,
+            "report": report_json,
+        }))?;
+
+        let editor_max_tokens = self.config.editor_max_tokens.unwrap_or(4096);
+
+        let request = MessagesRequest {
+            model: self.config.model.clone(),
+            max_tokens: editor_max_tokens,
+            temperature: self.config.temperature,
+            system: full_system,
+            messages: vec![Message {
+                role: "user".to_string(),
+                content: user_content,
+            }],
+            tools: vec![tool],
+            tool_choice: ToolChoice {
+                choice_type: "tool".to_string(),
+                name: schema["name"]
+                    .as_str()
+                    .unwrap_or("editor_output")
+                    .to_string(),
+            },
+        };
+
+        let api_url = self.provider.api_url();
+        let response = self.execute_with_retry(&request, api_url).await?;
+        let output = Self::extract_tool_output(&response)?;
+
+        let premium_html = output["premium_html"]
+            .as_str()
+            .ok_or_else(|| LlmError::SchemaValidation("editor output missing premium_html".into()))?
+            .to_string();
+
+        let free_html = output["free_html"].as_str().map(|s| s.to_string());
+
+        Ok(EditorOutput {
+            premium_html,
+            free_html,
             input_tokens: response.usage.input_tokens,
             output_tokens: response.usage.output_tokens,
             model: response.model,
@@ -450,6 +536,7 @@ mod tests {
                 base_delay_ms: 100,
                 max_delay_ms: 1000,
             },
+            editor_max_tokens: None,
         }
     }
 
@@ -736,5 +823,87 @@ mod tests {
         let api_url = format!("{}/v1/messages", mock_server.uri());
         let response = client.execute_with_retry(&request, &api_url).await.unwrap();
         assert_eq!(response.stop_reason, "tool_use");
+    }
+
+    #[tokio::test]
+    async fn edit_success() {
+        let mock_server = wiremock::MockServer::start().await;
+
+        let fixture = load_fixture("editor_response.json");
+
+        wiremock::Mock::given(wiremock::matchers::method("POST"))
+            .and(wiremock::matchers::path("/v1/messages"))
+            .and(wiremock::matchers::header("x-api-key", "test-key"))
+            .respond_with(wiremock::ResponseTemplate::new(200).set_body_string(&fixture))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let config = test_config();
+        let client = LlmClient {
+            http: reqwest::Client::new(),
+            config,
+            provider: Provider::Anthropic,
+            api_key: "test-key".into(),
+        };
+
+        // Build a minimal request and call edit() via execute_with_retry
+        let request = MessagesRequest {
+            model: "claude-opus-4-20250514".into(),
+            max_tokens: 4096,
+            temperature: 0.3,
+            system: "test editor system".into(),
+            messages: vec![Message {
+                role: "user".into(),
+                content: r#"{"report_type":"morning","produce_free_version":true,"report":{}}"#
+                    .into(),
+            }],
+            tools: vec![Tool {
+                name: "editor_output".into(),
+                description: "test".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+            }],
+            tool_choice: ToolChoice {
+                choice_type: "tool".into(),
+                name: "editor_output".into(),
+            },
+        };
+
+        let api_url = format!("{}/v1/messages", mock_server.uri());
+        let response = client.execute_with_retry(&request, &api_url).await.unwrap();
+        let output = LlmClient::extract_tool_output(&response).unwrap();
+
+        // Verify editor output fields
+        let premium_html = output["premium_html"].as_str().unwrap();
+        assert!(premium_html.contains("<b>Morning"));
+        assert!(premium_html.contains("ETH short below"));
+
+        let free_html = output["free_html"].as_str().unwrap();
+        assert!(free_html.contains("<b>Morning Brief</b>"));
+
+        assert_eq!(response.usage.input_tokens, 4500);
+        assert_eq!(response.usage.output_tokens, 800);
+    }
+
+    #[tokio::test]
+    async fn edit_missing_premium_html() {
+        // Verify that edit() rejects output missing premium_html
+        let response = MessagesResponse {
+            id: "msg_test".into(),
+            content: vec![ContentBlock::ToolUse {
+                id: "toolu_test".into(),
+                name: "editor_output".into(),
+                input: serde_json::json!({"free_html": "test"}),
+            }],
+            model: "test".into(),
+            stop_reason: "tool_use".into(),
+            usage: crate::llm::api_types::Usage {
+                input_tokens: 10,
+                output_tokens: 5,
+            },
+        };
+        let output = LlmClient::extract_tool_output(&response).unwrap();
+        // premium_html is missing — should be None when accessed
+        assert!(output["premium_html"].as_str().is_none());
     }
 }

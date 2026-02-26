@@ -1,0 +1,22 @@
+{
+  "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "tool_use",
+      "id": "toolu_01B09q90qw90lq917835lhds",
+      "name": "editor_output",
+      "input": {
+        "premium_html": "<b>Morning — Day 4 of consolidation</b>\n\nBTC holding $66.3K-$69.4K on declining volume. Market waiting.\n\n<b>ETH</b> — the one to watch. Funding creeping up while price drifts toward $1,880 liquidation cluster ($22M longs). Break triggers forced selling.\n\n<b>SOL</b> — relative strength, up 4.8% in 24h. Approaching $144 resistance.\n\n<b>Setups</b>\nETH short below $1,880 → $1,820 (inv $1,950) — 72%\nSOL long above $144 → $152 (inv $138) — 55%",
+        "free_html": "<b>Morning Brief</b>\n\nDay 4 range-bound. ETH approaching $1,880 liquidation cluster — key level today. SOL showing relative strength near $144."
+      }
+    }
+  ],
+  "model": "claude-opus-4-20250514",
+  "stop_reason": "tool_use",
+  "usage": {
+    "input_tokens": 4500,
+    "output_tokens": 800
+  }
+}

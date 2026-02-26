@@ -12,7 +12,7 @@ use tracing::{error, info, instrument};
 use crate::config::{DeliveryConfig, FormatMode, FreeChannelConfig, SetupFormat};
 use crate::llm::schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
 use crate::llm::types::Significance;
-use crate::llm::ReportType;
+use crate::llm::{EditorOutput, ReportType};
 use crate::storage::Database;
 
 /// Wraps all 5 report types for unified delivery handling.
@@ -139,6 +139,69 @@ impl DeliveryLayer {
         Ok(())
     }
 
+    /// Expose routing decision for orchestrator (called before editor).
+    pub fn evaluate_route(
+        &self,
+        report_type: ReportType,
+        significance: &Significance,
+    ) -> RouteDecision {
+        self.router.evaluate(report_type, significance)
+    }
+
+    /// Deliver pre-formatted editor output to Telegram.
+    #[instrument(
+        name = "delivery.deliver_edited",
+        skip(self, editor_output, route_decision),
+        fields(output_id)
+    )]
+    pub async fn deliver_edited(
+        &self,
+        editor_output: &EditorOutput,
+        route_decision: &RouteDecision,
+        output_id: i64,
+    ) -> Result<()> {
+        let delivery_start = std::time::Instant::now();
+        let now_ms = now_millis();
+
+        // Send to premium
+        if let Err(e) = self
+            .telegram
+            .send_premium(&editor_output.premium_html)
+            .await
+        {
+            error!("failed to send editor output to premium channel: {e}");
+            self.update_status(output_id, "failed", now_ms);
+            self.best_effort_notify(&format!("Failed to deliver editor output to premium: {e}"))
+                .await;
+            return Err(e);
+        }
+
+        info!("delivered editor output to premium channel");
+
+        // Send to free if routed and editor produced a free version
+        match route_decision {
+            RouteDecision::Send(_) => {
+                if let Some(ref free_html) = editor_output.free_html {
+                    if let Err(e) = self.telegram.send_free(free_html).await {
+                        error!("failed to send editor output to free channel: {e}");
+                        self.best_effort_notify(&format!(
+                            "Failed to deliver editor output to free: {e}"
+                        ))
+                        .await;
+                    }
+                }
+            }
+            RouteDecision::Skip => {}
+        }
+
+        self.update_status(output_id, "delivered", now_ms);
+
+        metrics::histogram!("kairex_delivery_duration_seconds", "stage" => "editor")
+            .record(delivery_start.elapsed().as_secs_f64());
+
+        Ok(())
+    }
+
     /// Send an operator notification (system status, error messages).
     pub async fn notify_operator(&self, message: &str) -> Result<()> {
         self.telegram.send_operator(message).await
@@ -228,6 +291,33 @@ mod tests {
 
         let weekly: WeeklyReport = load_fixture("weekly_report.json");
         assert_eq!(Report::Weekly(weekly).report_type(), ReportType::Weekly);
+    }
+
+    #[test]
+    fn evaluate_route_delegates_to_router() {
+        // evaluate_route should produce the same result as the router directly
+        use crate::config::FreeChannelConfig;
+        use std::path::PathBuf;
+
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("tests/fixtures/config/free_channel.toml");
+        let free_config = FreeChannelConfig::load(&path).unwrap();
+        let router = FreeChannelRouter::new(free_config.clone());
+
+        // High-magnitude morning should route
+        let sig = Significance {
+            magnitude: 0.8,
+            surprise: 0.1,
+            regime_relevance: 0.1,
+        };
+        let expected = router.evaluate(ReportType::Morning, &sig);
+        assert_eq!(expected, RouteDecision::Send(FormatMode::Condensed));
+
+        // Midday always skips
+        let expected = router.evaluate(ReportType::Midday, &sig);
+        assert_eq!(expected, RouteDecision::Skip);
     }
 
     #[test]

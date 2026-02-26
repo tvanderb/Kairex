@@ -10,7 +10,7 @@ use tracing::{error, info, instrument};
 
 use crate::analysis;
 use crate::config::AnalysisConfig;
-use crate::delivery::{DeliveryLayer, Report};
+use crate::delivery::{DeliveryLayer, Report, RouteDecision};
 use crate::evaluation::EvalEvent;
 use crate::llm::{LlmProvider, ReportType};
 use crate::scheduling::ScheduleEvent;
@@ -187,7 +187,7 @@ impl Orchestrator {
         }
     }
 
-    /// Shared pipeline: LLM generate, store in DB, extract setups, deserialize, deliver.
+    /// Shared pipeline: analyst generate → store → extract setups → route → editor → deliver.
     #[instrument(name = "orchestrator.pipeline", skip(self, context), fields(report_type = ?report_type))]
     async fn run_pipeline(
         &self,
@@ -200,29 +200,29 @@ impl Orchestrator {
             .trim_end_matches("_report")
             .to_string();
 
-        // LLM generate
+        // --- Analyst LLM call ---
         let llm_start = std::time::Instant::now();
         let llm_response = self
             .llm_client
             .generate(report_type, context, &self.project_root)
             .await?;
-        metrics::histogram!("kairex_llm_duration_seconds", "report_type" => type_label.clone())
+        metrics::histogram!("kairex_llm_duration_seconds", "report_type" => type_label.clone(), "stage" => "analyst")
             .record(llm_start.elapsed().as_secs_f64());
-        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "direction" => "input")
+        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "stage" => "analyst", "direction" => "input")
             .increment(llm_response.input_tokens as u64);
-        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "direction" => "output")
+        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "stage" => "analyst", "direction" => "output")
             .increment(llm_response.output_tokens as u64);
 
         info!(
             ?report_type,
             input_tokens = llm_response.input_tokens,
             output_tokens = llm_response.output_tokens,
-            "LLM generation complete"
+            "analyst generation complete"
         );
 
         let now = now_ms();
 
-        // Store raw output
+        // Store raw analyst output
         let output = SystemOutput {
             id: None,
             report_type: type_label.clone(),
@@ -243,10 +243,46 @@ impl Orchestrator {
             "stored report and setups"
         );
 
-        // Deserialize into typed Report for delivery
+        // Deserialize for significance access (router needs it)
         let report = deserialize_report(report_type, &llm_response.output)?;
 
-        match self.delivery.deliver(&report, output_id).await {
+        // --- Router evaluates before editor call ---
+        let route_decision = self
+            .delivery
+            .evaluate_route(report_type, report.significance());
+        let produce_free = matches!(route_decision, RouteDecision::Send(_));
+
+        // --- Editor LLM call ---
+        let editor_start = std::time::Instant::now();
+        let editor_output = self
+            .llm_client
+            .edit(
+                report_type,
+                &llm_response.output,
+                produce_free,
+                &self.project_root,
+            )
+            .await?;
+        metrics::histogram!("kairex_llm_duration_seconds", "report_type" => type_label.clone(), "stage" => "editor")
+            .record(editor_start.elapsed().as_secs_f64());
+        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "stage" => "editor", "direction" => "input")
+            .increment(editor_output.input_tokens as u64);
+        metrics::counter!("kairex_llm_tokens_total", "report_type" => type_label.clone(), "stage" => "editor", "direction" => "output")
+            .increment(editor_output.output_tokens as u64);
+
+        info!(
+            ?report_type,
+            input_tokens = editor_output.input_tokens,
+            output_tokens = editor_output.output_tokens,
+            "editor generation complete"
+        );
+
+        // --- Deliver editor output ---
+        match self
+            .delivery
+            .deliver_edited(&editor_output, &route_decision, output_id)
+            .await
+        {
             Ok(()) => {
                 metrics::counter!("kairex_reports_generated_total", "report_type" => type_label.clone())
                     .increment(1);

@@ -9,6 +9,15 @@ pub use types::*;
 
 use std::path::Path;
 
+/// Output from the editor LLM call — ready-to-send Telegram HTML.
+pub struct EditorOutput {
+    pub premium_html: String,
+    pub free_html: Option<String>,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub model: String,
+}
+
 /// Which LLM API backend to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provider {
@@ -52,6 +61,14 @@ pub trait LlmProvider: Send + Sync {
         context: &serde_json::Value,
         project_root: &Path,
     ) -> Result<LlmResponse, LlmError>;
+
+    async fn edit(
+        &self,
+        report_type: ReportType,
+        report_json: &serde_json::Value,
+        produce_free: bool,
+        project_root: &Path,
+    ) -> Result<EditorOutput, LlmError>;
 }
 
 /// Errors from LLM API calls and response handling.
@@ -102,6 +119,17 @@ impl ReportType {
             "alert" => Some(Self::Alert),
             "weekly" => Some(Self::Weekly),
             _ => None,
+        }
+    }
+
+    /// String name for this report type (e.g. "morning").
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Morning => "morning",
+            Self::Midday => "midday",
+            Self::Evening => "evening",
+            Self::Alert => "alert",
+            Self::Weekly => "weekly",
         }
     }
 

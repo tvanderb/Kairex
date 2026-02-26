@@ -1,0 +1,18 @@
+{
+  "name": "editor_output",
+  "description": "Editor output: compressed Telegram HTML for premium and optionally free channels.",
+  "input_schema": {
+    "type": "object",
+    "required": ["premium_html"],
+    "properties": {
+      "premium_html": {
+        "type": "string",
+        "description": "Complete Telegram HTML message for the premium channel. Must be valid Telegram HTML, under 4096 characters."
+      },
+      "free_html": {
+        "type": ["string", "null"],
+        "description": "Shorter Telegram HTML for the free channel. Null if produce_free_version was false."
+      }
+    }
+  }
+}
