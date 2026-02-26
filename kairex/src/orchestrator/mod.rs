@@ -74,7 +74,10 @@ impl Orchestrator {
         fields(report_type)
     )]
     async fn handle_schedule_event(&self, event: ScheduleEvent) {
-        let ScheduleEvent::GenerateReport { report_type, .. } = event;
+        let ScheduleEvent::GenerateReport {
+            report_type,
+            delivery_time_ms,
+        } = event;
 
         let parsed = match ReportType::parse(&report_type) {
             Some(rt) => rt,
@@ -107,7 +110,10 @@ impl Orchestrator {
             }
         };
 
-        if let Err(e) = self.run_pipeline(parsed, &context).await {
+        if let Err(e) = self
+            .run_pipeline(parsed, &context, Some(delivery_time_ms))
+            .await
+        {
             error!(error = %e, ?parsed, "pipeline failed for scheduled report");
         }
     }
@@ -182,17 +188,18 @@ impl Orchestrator {
             );
         }
 
-        if let Err(e) = self.run_pipeline(ReportType::Alert, &context).await {
+        if let Err(e) = self.run_pipeline(ReportType::Alert, &context, None).await {
             error!(error = %e, asset = %setup.asset, "pipeline failed for alert");
         }
     }
 
-    /// Shared pipeline: analyst generate → store → extract setups → route → editor → deliver.
+    /// Shared pipeline: analyst generate → store → extract setups → route → editor → hold → deliver.
     #[instrument(name = "orchestrator.pipeline", skip(self, context), fields(report_type = ?report_type))]
     async fn run_pipeline(
         &self,
         report_type: ReportType,
         context: &serde_json::Value,
+        delivery_time_ms: Option<i64>,
     ) -> Result<()> {
         let pipeline_start = std::time::Instant::now();
         let type_label = report_type
@@ -276,6 +283,19 @@ impl Orchestrator {
             output_tokens = editor_output.output_tokens,
             "editor generation complete"
         );
+
+        // --- Hold until scheduled delivery time ---
+        if let Some(target_ms) = delivery_time_ms {
+            let remaining_ms = target_ms - now_ms();
+            if remaining_ms > 0 {
+                info!(
+                    ?report_type,
+                    hold_seconds = remaining_ms / 1000,
+                    "holding until scheduled delivery time"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(remaining_ms as u64)).await;
+            }
+        }
 
         // --- Deliver editor output ---
         match self
