@@ -14,6 +14,12 @@ use kairex::storage::Database;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Install rustls CryptoProvider before any TLS clients are created.
+    // Both aws-lc-rs and ring are in the dep tree, so rustls can't auto-detect.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("failed to install rustls CryptoProvider");
+
     let _otel_guard = kairex::observability::init();
 
     let project_root = PathBuf::from(".");
