@@ -70,6 +70,22 @@ impl EvaluationLayer {
     }
 
     async fn run_loop(self, tx: mpsc::Sender<EvalEvent>) {
+        // Expire stale setups from previous process
+        let expiry_minutes = self.eval_config.startup_expiry_minutes.unwrap_or(120);
+        let cutoff = now_ms() - (expiry_minutes as i64) * 60 * 1000;
+        match db_blocking(&self.db, move |db| db.expire_stale_setups(cutoff)).await {
+            Ok(n) if n > 0 => info!(expired = n, "expired stale setups from prior run"),
+            Ok(_) => {}
+            Err(e) => warn!(error = %e, "failed to expire stale setups"),
+        }
+
+        // Grace period: wait for collection layer to populate fresh data
+        let delay = self.eval_config.startup_delay_seconds.unwrap_or(60);
+        if delay > 0 {
+            info!(delay_seconds = delay, "evaluation startup delay");
+            tokio::time::sleep(Duration::from_secs(delay)).await;
+        }
+
         let interval = Duration::from_secs(self.eval_config.cycle_interval_seconds);
         loop {
             match self.run_cycle(&tx).await {
@@ -346,6 +362,8 @@ mod tests {
                 setup_trigger: 60,
                 setup_invalidation: 60,
             },
+            startup_expiry_minutes: None,
+            startup_delay_seconds: None,
         }
     }
 

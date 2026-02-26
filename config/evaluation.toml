@@ -3,6 +3,14 @@
 # How often the evaluation loop checks active setups (seconds).
 cycle_interval_seconds = 300
 
+# On startup, expire active setups older than this (minutes).
+# Prevents stale setups from a prior process firing simultaneously.
+startup_expiry_minutes = 120
+
+# Delay before first evaluation cycle (seconds).
+# Gives the collection layer time to populate fresh data.
+startup_delay_seconds = 60
+
 [cooldown_minutes]
 # Cooldown after a setup trigger fires (minutes).
 # Prevents duplicate alerts for the same trigger condition.

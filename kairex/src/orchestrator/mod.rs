@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use serde_json::json;
 use tokio::sync::mpsc;
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 use crate::analysis;
 use crate::config::AnalysisConfig;
@@ -119,6 +119,9 @@ impl Orchestrator {
             }
         };
 
+        // Enrich with indicators and active setups
+        let context = self.enrich_context(context, &self.assets).await;
+
         if let Err(e) = self
             .run_pipeline(parsed, &context, Some(delivery_time_ms))
             .await
@@ -160,7 +163,7 @@ impl Orchestrator {
 
         let context_start = std::time::Instant::now();
         let asset_list = vec![setup.asset.clone()];
-        let mut context = match analysis::build_context(
+        let context = match analysis::build_context(
             &self.db,
             &asset_list,
             &self.analysis_config,
@@ -184,6 +187,9 @@ impl Orchestrator {
             }
         };
 
+        // Enrich with indicators and active setups for this asset
+        let mut context = self.enrich_context(context, &asset_list).await;
+
         // Augment context with trigger metadata
         if let Some(obj) = context.as_object_mut() {
             obj.insert(
@@ -205,6 +211,51 @@ impl Orchestrator {
         if let Err(e) = self.run_pipeline(ReportType::Alert, &context, None).await {
             error!(error = %e, asset = %setup.asset, "pipeline failed for alert");
         }
+    }
+
+    /// Enrich context with technical indicators and active setups.
+    async fn enrich_context(
+        &self,
+        mut context: serde_json::Value,
+        assets: &[String],
+    ) -> serde_json::Value {
+        let obj = match context.as_object_mut() {
+            Some(o) => o,
+            None => return context,
+        };
+
+        // Add technical indicators
+        match analysis::compute_indicators(
+            &self.db,
+            assets,
+            &self.analysis_config,
+            &self.project_root,
+        )
+        .await
+        {
+            Ok(indicators) => {
+                obj.insert("indicators".to_string(), indicators);
+            }
+            Err(e) => {
+                warn!(error = %e, "indicator computation failed, proceeding without");
+            }
+        }
+
+        // Add active setups
+        match db_blocking(&self.db, |db| db.query_active_setups()).await {
+            Ok(setups) if !setups.is_empty() => {
+                obj.insert(
+                    "active_setups".to_string(),
+                    serde_json::to_value(&setups).unwrap_or_default(),
+                );
+            }
+            Ok(_) => {} // no active setups, omit key
+            Err(e) => {
+                warn!(error = %e, "failed to query active setups, proceeding without");
+            }
+        }
+
+        context
     }
 
     /// Shared pipeline: analyst generate → store → extract setups → route → editor → hold → deliver.
@@ -401,4 +452,16 @@ fn now_ms() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis() as i64
+}
+
+/// Async-safe bridge: run a synchronous Database closure on a blocking thread.
+async fn db_blocking<F, T>(db: &Database, f: F) -> Result<T>
+where
+    F: FnOnce(&Database) -> crate::storage::Result<T> + Send + 'static,
+    T: Send + 'static,
+{
+    let db = db.clone();
+    tokio::task::spawn_blocking(move || f(&db))
+        .await?
+        .map_err(OrchestratorError::Storage)
 }

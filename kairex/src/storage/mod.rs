@@ -135,6 +135,10 @@ impl Database {
         })
     }
 
+    pub fn expire_stale_setups(&self, before_timestamp: i64) -> Result<u64> {
+        self.with_writer(|conn| system_output::expire_stale_setups(conn, before_timestamp))
+    }
+
     pub fn query_active_setups(&self) -> Result<Vec<ActiveSetup>> {
         self.with_reader(system_output::query_active_setups)
     }

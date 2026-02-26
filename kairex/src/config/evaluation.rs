@@ -8,6 +8,10 @@ use super::ConfigError;
 pub struct EvaluationConfig {
     pub cycle_interval_seconds: u64,
     pub cooldown_minutes: CooldownConfig,
+    #[serde(default)]
+    pub startup_expiry_minutes: Option<u64>,
+    #[serde(default)]
+    pub startup_delay_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

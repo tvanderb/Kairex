@@ -18,4 +18,7 @@ pub enum OrchestratorError {
 
     #[error("config error: {0}")]
     Config(String),
+
+    #[error("join error: {0}")]
+    Join(#[from] tokio::task::JoinError),
 }

@@ -169,6 +169,22 @@ pub fn update_delivery_status(
     Ok(())
 }
 
+/// Expire all active setups created before the given timestamp.
+/// Used on startup to clear stale setups from a previous process.
+/// Returns the number of setups expired.
+pub fn expire_stale_setups(conn: &Connection, before_timestamp: i64) -> Result<u64> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+    let count = conn.execute(
+        "UPDATE active_setups SET status = 'expired', resolved_at = ?1
+         WHERE status = 'active' AND created_at < ?2",
+        params![now, before_timestamp],
+    )?;
+    Ok(count as u64)
+}
+
 pub fn query_active_setups(conn: &Connection) -> Result<Vec<ActiveSetup>> {
     let mut stmt = conn.prepare(
         "SELECT id, source_output_id, asset, direction, trigger_condition, trigger_level,
@@ -804,5 +820,63 @@ mod tests {
         assert_eq!(active.len(), 2);
         assert_eq!(active[0].confidence, Some(0.72));
         assert!(active[0].trigger_field.is_none());
+    }
+
+    #[test]
+    fn expire_stale_setups_expires_old() {
+        let (_tmp, db) = test_db();
+        let output = make_output("morning", 1000);
+        let setups = vec![make_setup("BTCUSDT", 1000), make_setup("ETHUSDT", 2000)];
+        db.with_writer(|conn| store_report(conn, &output, &setups))
+            .unwrap();
+
+        // Expire setups created before t=1500 — only BTCUSDT (created_at=1000) should expire
+        let expired = db
+            .with_writer(|conn| expire_stale_setups(conn, 1500))
+            .unwrap();
+        assert_eq!(expired, 1);
+
+        let active = db.with_reader(query_active_setups).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].asset, "ETHUSDT");
+    }
+
+    #[test]
+    fn expire_stale_setups_noop_when_none_stale() {
+        let (_tmp, db) = test_db();
+        let output = make_output("morning", 5000);
+        let setups = vec![make_setup("BTCUSDT", 5000)];
+        db.with_writer(|conn| store_report(conn, &output, &setups))
+            .unwrap();
+
+        // Cutoff before any setups exist — nothing to expire
+        let expired = db
+            .with_writer(|conn| expire_stale_setups(conn, 1000))
+            .unwrap();
+        assert_eq!(expired, 0);
+
+        let active = db.with_reader(query_active_setups).unwrap();
+        assert_eq!(active.len(), 1);
+    }
+
+    #[test]
+    fn expire_stale_setups_ignores_resolved() {
+        let (_tmp, db) = test_db();
+        let output = make_output("morning", 1000);
+        let setups = vec![make_setup("BTCUSDT", 1000)];
+        db.with_writer(|conn| store_report(conn, &output, &setups))
+            .unwrap();
+
+        // Resolve the setup first
+        let active = db.with_reader(query_active_setups).unwrap();
+        let setup_id = active[0].id.unwrap();
+        db.with_writer(|conn| resolve_setup(conn, setup_id, "triggered", 1500, 71000.0))
+            .unwrap();
+
+        // Expire should find nothing — setup is already resolved
+        let expired = db
+            .with_writer(|conn| expire_stale_setups(conn, 5000))
+            .unwrap();
+        assert_eq!(expired, 0);
     }
 }
