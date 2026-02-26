@@ -4,6 +4,7 @@ mod collection;
 mod delivery;
 mod evaluation;
 mod llm;
+mod operator;
 mod schedules;
 
 pub use analysis::{AnalysisConfig, IndicatorsConfig};
@@ -14,6 +15,7 @@ pub use delivery::{
 };
 pub use evaluation::{CooldownConfig, EvaluationConfig};
 pub use llm::{LlmConfig, LlmRetryConfig};
+pub use operator::OperatorConfig;
 pub use schedules::{OvernightConfig, ReportSchedule, SchedulesConfig, WeeklySchedule};
 
 use thiserror::Error;

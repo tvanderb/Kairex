@@ -15,6 +15,7 @@ use tokio::task::JoinHandle;
 use tracing::info;
 
 use crate::config::{AssetsConfig, CollectionConfig};
+use crate::operator::{OperatorEvent, OperatorSender};
 use crate::storage::Database;
 
 use backfill::BackfillOrchestrator;
@@ -37,6 +38,7 @@ pub struct CollectionLayer {
     assets_config: AssetsConfig,
     collection_config: CollectionConfig,
     event_tx: broadcast::Sender<CollectionEvent>,
+    operator: OperatorSender,
 }
 
 impl CollectionLayer {
@@ -44,6 +46,7 @@ impl CollectionLayer {
         db: Database,
         assets_config: AssetsConfig,
         collection_config: CollectionConfig,
+        operator: OperatorSender,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(256);
         Self {
@@ -51,6 +54,7 @@ impl CollectionLayer {
             assets_config,
             collection_config,
             event_tx,
+            operator,
         }
     }
 
@@ -96,9 +100,18 @@ impl CollectionLayer {
                     indices = summary.indices_backfilled,
                     "initial backfill complete"
                 );
+                self.operator.emit(OperatorEvent::BackfillComplete {
+                    candles: summary.candles_backfilled,
+                    funding: summary.funding_rates_backfilled,
+                    open_interest: summary.open_interest_backfilled,
+                    indices: summary.indices_backfilled,
+                });
             }
             Err(e) => {
                 tracing::error!(error = %e, "initial backfill failed, continuing with live collection");
+                self.operator.emit(OperatorEvent::BackfillFailed {
+                    error: e.to_string(),
+                });
             }
         }
 
@@ -121,9 +134,14 @@ impl CollectionLayer {
             ws_backfill,
         );
 
+        let ws_symbol_count = assets.len();
         handles.push(tokio::spawn(async move {
             ws.run().await;
         }));
+
+        self.operator.emit(OperatorEvent::WebSocketConnected {
+            symbols: ws_symbol_count,
+        });
 
         let retry = self.collection_config.retry.clone();
 

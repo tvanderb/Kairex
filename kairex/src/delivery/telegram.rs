@@ -6,6 +6,7 @@ use super::error::{DeliveryError, Result};
 const DEFAULT_API_BASE: &str = "https://api.telegram.org";
 const TELEGRAM_MAX_LENGTH: usize = 4096;
 
+#[derive(Clone)]
 pub struct TelegramClient {
     http: reqwest::Client,
     bot_token: String,

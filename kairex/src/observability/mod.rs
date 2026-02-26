@@ -7,6 +7,8 @@ use opentelemetry_sdk::Resource;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::EnvFilter;
 
+use crate::operator::{OperatorEvent, OperatorSender};
+
 /// Guard that flushes the OpenTelemetry trace pipeline on drop.
 pub struct OtelGuard {
     provider: Option<SdkTracerProvider>,
@@ -25,26 +27,39 @@ impl Drop for OtelGuard {
 /// Initialize structured logging, metrics, and trace export.
 ///
 /// - JSON logs to stdout (controlled by RUST_LOG, default: info)
-/// - Prometheus metrics on 0.0.0.0:9090
+/// - Prometheus metrics on 0.0.0.0:9090 (degrades gracefully if port unavailable)
 /// - OTLP trace export to OTEL_EXPORTER_OTLP_ENDPOINT (default: http://tempo:4317)
 ///   Set to "" to disable trace export.
-pub fn init() -> OtelGuard {
+pub fn init(operator: OperatorSender) -> OtelGuard {
     // 1. Prometheus metrics HTTP listener on :9090
-    metrics_exporter_prometheus::PrometheusBuilder::new()
+    if let Err(e) = metrics_exporter_prometheus::PrometheusBuilder::new()
         .with_http_listener(([0, 0, 0, 0], 9090))
         .install()
-        .expect("failed to install Prometheus metrics exporter");
+    {
+        eprintln!("metrics exporter failed: {e} — running without Prometheus metrics");
+        operator.emit(OperatorEvent::MetricsUnavailable {
+            error: e.to_string(),
+        });
+    }
 
     // 2. OpenTelemetry tracer (if endpoint configured)
     let otel_endpoint =
         env::var("OTEL_EXPORTER_OTLP_ENDPOINT").unwrap_or_else(|_| "http://tempo:4317".to_string());
 
     let (otel_layer, provider) = if otel_endpoint.is_empty() {
+        operator.emit(OperatorEvent::TracerUnavailable {
+            reason: "OTEL_EXPORTER_OTLP_ENDPOINT is empty".into(),
+        });
         (None, None)
     } else {
         match build_otel(otel_endpoint) {
             Some((layer, provider)) => (Some(layer), Some(provider)),
-            None => (None, None),
+            None => {
+                operator.emit(OperatorEvent::TracerUnavailable {
+                    reason: "failed to build OTLP exporter".into(),
+                });
+                (None, None)
+            }
         }
     };
 

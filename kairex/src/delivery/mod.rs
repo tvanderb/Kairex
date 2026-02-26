@@ -13,6 +13,7 @@ use crate::config::{DeliveryConfig, FormatMode, FreeChannelConfig, SetupFormat};
 use crate::llm::schemas::{AlertReport, EveningReport, MiddayReport, MorningReport, WeeklyReport};
 use crate::llm::types::Significance;
 use crate::llm::{EditorOutput, ReportType};
+use crate::operator::{OperatorEvent, OperatorSender};
 use crate::storage::Database;
 
 /// Wraps all 5 report types for unified delivery handling.
@@ -51,23 +52,26 @@ pub struct DeliveryLayer {
     router: FreeChannelRouter,
     setup_format: SetupFormat,
     db: Database,
+    operator: OperatorSender,
 }
 
 impl DeliveryLayer {
     pub fn new(
+        telegram: TelegramClient,
         delivery_config: &DeliveryConfig,
         free_channel_config: FreeChannelConfig,
         db: Database,
-    ) -> Result<Self> {
-        let telegram = TelegramClient::from_env()?;
+        operator: OperatorSender,
+    ) -> Self {
         let router = FreeChannelRouter::new(free_channel_config);
 
-        Ok(Self {
+        Self {
             telegram,
             router,
             setup_format: delivery_config.setup_format,
             db,
-        })
+            operator,
+        }
     }
 
     /// Deliver a report to premium channel, optionally to free channel, and update DB.
@@ -85,11 +89,10 @@ impl DeliveryLayer {
         if let Err(e) = self.telegram.send_premium(&premium_html).await {
             error!(?report_type, "failed to send to premium channel: {e}");
             self.update_status(output_id, "failed", now_ms);
-            self.best_effort_notify(&format!(
-                "Failed to deliver {} to premium: {e}",
-                report_type.tool_name()
-            ))
-            .await;
+            self.operator.emit(OperatorEvent::DeliveryFailed {
+                destination: "premium".into(),
+                error: e.to_string(),
+            });
             return Err(e);
         }
 
@@ -102,12 +105,10 @@ impl DeliveryLayer {
             RouteDecision::Send(FormatMode::PassThrough) => {
                 if let Err(e) = self.telegram.send_free(&premium_html).await {
                     error!(?report_type, "failed to send to free channel: {e}");
-                    self.best_effort_notify(&format!(
-                        "Failed to deliver {} to free: {e}",
-                        report_type.tool_name()
-                    ))
-                    .await;
-                    // Premium succeeded, so mark as delivered but log the free failure
+                    self.operator.emit(OperatorEvent::DeliveryFailed {
+                        destination: "free".into(),
+                        error: e.to_string(),
+                    });
                 }
             }
             RouteDecision::Send(FormatMode::Condensed) => {
@@ -117,11 +118,10 @@ impl DeliveryLayer {
                         ?report_type,
                         "failed to send condensed to free channel: {e}"
                     );
-                    self.best_effort_notify(&format!(
-                        "Failed to deliver condensed {} to free: {e}",
-                        report_type.tool_name()
-                    ))
-                    .await;
+                    self.operator.emit(OperatorEvent::DeliveryFailed {
+                        destination: "free".into(),
+                        error: e.to_string(),
+                    });
                 }
             }
             RouteDecision::Skip => {}
@@ -171,8 +171,10 @@ impl DeliveryLayer {
         {
             error!("failed to send editor output to premium channel: {e}");
             self.update_status(output_id, "failed", now_ms);
-            self.best_effort_notify(&format!("Failed to deliver editor output to premium: {e}"))
-                .await;
+            self.operator.emit(OperatorEvent::DeliveryFailed {
+                destination: "premium".into(),
+                error: e.to_string(),
+            });
             return Err(e);
         }
 
@@ -184,10 +186,10 @@ impl DeliveryLayer {
                 if let Some(ref free_html) = editor_output.free_html {
                     if let Err(e) = self.telegram.send_free(free_html).await {
                         error!("failed to send editor output to free channel: {e}");
-                        self.best_effort_notify(&format!(
-                            "Failed to deliver editor output to free: {e}"
-                        ))
-                        .await;
+                        self.operator.emit(OperatorEvent::DeliveryFailed {
+                            destination: "free".into(),
+                            error: e.to_string(),
+                        });
                     }
                 }
             }
@@ -202,23 +204,12 @@ impl DeliveryLayer {
         Ok(())
     }
 
-    /// Send an operator notification (system status, error messages).
-    pub async fn notify_operator(&self, message: &str) -> Result<()> {
-        self.telegram.send_operator(message).await
-    }
-
     fn update_status(&self, output_id: i64, status: &str, delivered_at: i64) {
         if let Err(e) = self
             .db
             .update_delivery_status(output_id, status, delivered_at)
         {
             error!(output_id, "failed to update delivery status: {e}");
-        }
-    }
-
-    async fn best_effort_notify(&self, message: &str) {
-        if let Err(e) = self.telegram.send_operator(message).await {
-            error!("failed to notify operator: {e}");
         }
     }
 }
@@ -295,7 +286,6 @@ mod tests {
 
     #[test]
     fn evaluate_route_delegates_to_router() {
-        // evaluate_route should produce the same result as the router directly
         use crate::config::FreeChannelConfig;
         use std::path::PathBuf;
 
@@ -306,7 +296,6 @@ mod tests {
         let free_config = FreeChannelConfig::load(&path).unwrap();
         let router = FreeChannelRouter::new(free_config.clone());
 
-        // High-magnitude morning should route
         let sig = Significance {
             magnitude: 0.8,
             surprise: 0.1,
@@ -315,7 +304,6 @@ mod tests {
         let expected = router.evaluate(ReportType::Morning, &sig);
         assert_eq!(expected, RouteDecision::Send(FormatMode::Condensed));
 
-        // Midday always skips
         let expected = router.evaluate(ReportType::Midday, &sig);
         assert_eq!(expected, RouteDecision::Skip);
     }

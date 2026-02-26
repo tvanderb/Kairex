@@ -1,0 +1,5 @@
+# Operator notification verbosity:
+#   verbose — all events (backfill, pipeline stats, warnings, errors)
+#   normal  — warnings and errors only
+#   quiet   — errors only
+verbosity = "verbose"
