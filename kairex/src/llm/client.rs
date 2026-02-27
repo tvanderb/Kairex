@@ -257,13 +257,30 @@ impl LlmClient {
                 Ok(response) => {
                     let status = response.status().as_u16();
 
+                    // Read body — retry on failure regardless of status
+                    let body = match response.text().await {
+                        Ok(b) => b,
+                        Err(e) => {
+                            let delay = compute_backoff(attempt, base_delay, max_delay);
+                            warn!(
+                                error = %e,
+                                status,
+                                delay_ms = delay,
+                                attempt,
+                                "response body read failed, retrying"
+                            );
+                            last_error = Some(LlmError::Http(e));
+                            if attempt < max_retries {
+                                tokio::time::sleep(Duration::from_millis(delay)).await;
+                            }
+                            continue;
+                        }
+                    };
+
                     if status == 200 {
-                        let body = response.text().await?;
                         let parsed: MessagesResponse = serde_json::from_str(&body)?;
                         return Ok(parsed);
                     }
-
-                    let body = response.text().await.unwrap_or_default();
 
                     // 429 — rate limited, use retry-after if available
                     if status == 429 {
@@ -771,6 +788,81 @@ mod tests {
         let api_url = format!("{}/v1/messages", mock_server.uri());
         let response = client.execute_with_retry(&request, &api_url).await.unwrap();
         assert_eq!(response.stop_reason, "tool_use");
+    }
+
+    #[tokio::test]
+    async fn generate_retries_on_body_read_failure() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let fixture = load_fixture("anthropic_response.json");
+
+        let server = tokio::spawn(async move {
+            // First connection: send 200 with mismatched Content-Length, then close
+            {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 131072];
+                let _ = sock.read(&mut buf).await;
+                let resp =
+                    "HTTP/1.1 200 OK\r\nContent-Length: 999999\r\n\r\n{\"truncated\"";
+                sock.write_all(resp.as_bytes()).await.unwrap();
+                sock.shutdown().await.ok();
+            }
+
+            // Second connection: full valid response
+            {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 131072];
+                let _ = sock.read(&mut buf).await;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                    fixture.len(),
+                    fixture
+                );
+                sock.write_all(resp.as_bytes()).await.unwrap();
+            }
+        });
+
+        let config = test_config();
+        let client = LlmClient {
+            http: reqwest::Client::builder()
+                .pool_max_idle_per_host(0)
+                .build()
+                .unwrap(),
+            config,
+            provider: Provider::Anthropic,
+            api_key: "test-key".into(),
+        };
+
+        let request = MessagesRequest {
+            model: "claude-opus-4-20250514".into(),
+            max_tokens: 8192,
+            temperature: 0.3,
+            system: "test".into(),
+            messages: vec![Message {
+                role: "user".into(),
+                content: "{}".into(),
+            }],
+            tools: vec![Tool {
+                name: "morning_report".into(),
+                description: "test".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+            }],
+            tool_choice: ToolChoice {
+                choice_type: "tool".into(),
+                name: "morning_report".into(),
+            },
+        };
+
+        let api_url = format!("http://127.0.0.1:{port}/v1/messages");
+        let response = client
+            .execute_with_retry(&request, &api_url)
+            .await
+            .unwrap();
+        assert_eq!(response.stop_reason, "tool_use");
+
+        server.await.unwrap();
     }
 
     #[tokio::test]
